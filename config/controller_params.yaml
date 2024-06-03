@@ -1,0 +1,18 @@
+#Joint ids from `joint_states`: 
+#expected order is: [Mh,HI,SI,HO,SO]
+fr_joint_state_ids: [0,1,2,3,4]
+rr_joint_state_ids: [5,6,7,8,9]
+fl_joint_state_ids: [10,11,12,13,14]
+rl_joint_state_ids: [15,16,16,18,19]
+
+#motor ids. Expected order is: [Mh,HI,HO]
+fr_motor_ids: [6,5,4]
+rr_motor_ids: [12,11,10]
+fl_motor_ids: [3,2,1]
+rl_motor_ids: [9,8,7]
+
+#Mh: MotorHousing
+#HI: HipInner
+#SI: ShankInner
+#HO: HipOuter
+#SO: ShankOuter

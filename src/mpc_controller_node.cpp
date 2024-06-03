@@ -6,12 +6,14 @@
 #include "cubemars_controller_ros_msgs/SetpointArray.h"
 #include "sensor_msgs/JointState.h"
 
+#define corresponding_kinematic_configuration(leg_id) ( (i==0 || i==3)? 1: 2 ) 
+
 //This are read from a config in WBC class
 struct leg_controller_opt{
   std::array<int,5> joint_state_id{0,1,2,3,4};
   std::array<int,3> motor_id{6,5,4};
   int kinematic_config = 1; //[1,2]
-  int leg_id = 1; 
+  int leg_id = 0; 
 };
 
 class leg_controller {
@@ -33,6 +35,12 @@ class leg_controller {
       qd[0] = q[0];
       qd[1] = q[1];
       qd[2] = q[3];
+
+      //Debugging:
+      std::cout << "Current id is: " << id << std::endl;
+      for (auto id:joint_state_id){std::cout << id << std::endl;}
+      std::cout << "====" << std::endl;
+      for (auto id:opts.motor_id){std::cout << id << std::endl;}
 
   }
 
@@ -90,6 +98,48 @@ class leg_controller {
 
 };
 
+class whole_body_controller {
+  public:		
+    whole_body_controller() {
+      ros::NodeHandle nh;
+
+      //get parameters:
+      std::string param_name;
+
+      std::array<std::string,4> leg_prefix{ "fr","rr","fl","rl"};
+      std::array< std::vector<int>,4 > joint_state_ids;
+      std::array< std::vector<int>,4 > motor_ids;
+
+      for (int i=0; i<4; i++){
+        param_name = leg_prefix[i]+"_joint_state_ids";
+        if ( !nh.getParam(param_name,joint_state_ids[i]) ){
+           ROS_INFO_STREAM("[mpc controller]: Couldn't read parameter: " << param_name);
+        }
+
+        param_name = leg_prefix[i]+"_motor_ids";
+        if ( !nh.getParam(param_name,motor_ids[i]) ){
+           ROS_INFO_STREAM("[mpc controller]: Couldn't read parameter: " << param_name);
+        }
+      }
+
+      //create corresponding structs
+      for (int i =0; i<4; i++){
+        leg_controller_opt leg_opts;
+        leg_opts.leg_id = i;
+        leg_opts.kinematic_config = corresponding_kinematic_configuration(i) ;
+
+        std::copy(motor_ids[i].begin(),motor_ids[i].end(),leg_opts.motor_id.begin());
+        std::copy(joint_state_ids[i].begin(),joint_state_ids[i].end(),leg_opts.joint_state_id.begin());
+
+        leg_controllers[i] = std::make_unique<leg_controller>(leg_opts);
+      }
+
+      ;
+    }
+  private:
+  std::array< std::unique_ptr< leg_controller>,4> leg_controllers;
+};
+
 int main(int argc, char **argv) {
 
 // Ros: node SETUP
@@ -101,11 +151,10 @@ double loop_freq = 100 ;
 ros::Rate loop_rate(loop_freq); //HZ
 #pragma endregion
 
-leg_controller_opt fr_opts;
-leg_controller controller(fr_opts);
+whole_body_controller wbc;
 
 while(ros::ok()){
-  controller.Publish();
+  // controller.Publish();
   ros::spinOnce(); // Process any callbacks
   loop_rate.sleep();
 }
