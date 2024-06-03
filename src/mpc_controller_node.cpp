@@ -7,6 +7,7 @@
 #include "sensor_msgs/JointState.h"
 
 #define corresponding_kinematic_configuration(leg_id) ( (i==0 || i==3)? 1: 2 ) 
+#define traj_stages 4
 
 //This are read from a config in WBC class
 struct leg_controller_opt{
@@ -116,6 +117,7 @@ class whole_body_controller {
   public:		
     whole_body_controller() {
       ros::NodeHandle nh;
+      ros::NodeHandle nh_param("~");
 
       //1. get parameters:
       std::string param_name;
@@ -126,12 +128,12 @@ class whole_body_controller {
 
       for (int i=0; i<4; i++){
         param_name = leg_prefix[i]+"_joint_state_ids";
-        if ( !nh.getParam(param_name,joint_state_ids[i]) ){
+        if ( !nh_param.getParam(param_name,joint_state_ids[i]) ){
            ROS_ERROR_STREAM("[mpc controller]: Couldn't read parameter: " << param_name);
         }
 
         param_name = leg_prefix[i]+"_motor_ids";
-        if ( !nh.getParam(param_name,motor_ids[i]) ){
+        if ( !nh_param.getParam(param_name,motor_ids[i]) ){
            ROS_ERROR_STREAM("[mpc controller]: Couldn't read parameter: " << param_name);
         }
       }
@@ -151,7 +153,7 @@ class whole_body_controller {
       }
 
       //3. trajectory timer
-      trajectory_timer = nh.createTimer(5,&whole_body_controller::trajectory_publish,this,true,false);
+      trajectory_timer = nh.createTimer(5,&whole_body_controller::trajectory_publish,this);
       trajectory_timer.setPeriod( ros::Duration(1) );
       trajectory_timer.start();
       ;
@@ -193,21 +195,32 @@ class whole_body_controller {
     std::array< const Eigen::Vector3f *, 4> qd{&qd_fr,&qd_rr,&qd_fl,&qd_rl};
     for (int i=0; i<4; i++){ 
       leg_controllers[i] -> setCommand( *qd[i] ); 
-      }
+    }
 
   }
 
   void trajectory_publish(const ros::TimerEvent&){
-    Eigen::Vector3f pos{45,60,-30};
+    int & i = trajectory_indexer;
+    Eigen::Vector3f pos(qMH_t[i],qHI_t[i],qHO_t[i]);
     allocation(pos);
-    trajectory_timer.stop();
+    trajectory_timer.setPeriod( ros::Duration( traj_dt[i]) );
+    
+    i++;
+    if (i == traj_stages){i=0;}
   }
 
   bool cancel_roll = true;
-  bool pitch_mode  = false;
+  bool pitch_mode  = true;
 
   ros::Timer trajectory_timer;
   std::array< std::unique_ptr< leg_controller>,4> leg_controllers;
+
+  //Saved trajectory:
+  int trajectory_indexer = 0;
+  std::vector<double> qMH_t{0.0, 0.0, 0.0, 0.0};
+  std::vector<double> qHI_t{110.0, -60.0, 0.0, 100.0};
+  std::vector<double> qHO_t{110.0, 230.0, 0.0, -60.0};
+  std::vector<double> traj_dt {1, 1, 0.5, 1}; //dt
 };
 
 int main(int argc, char **argv) {
