@@ -6,16 +6,23 @@
 #include "cubemars_controller_ros_msgs/SetpointArray.h"
 #include "sensor_msgs/JointState.h"
 
+//This are read from a config in WBC class
+struct leg_controller_opt{
+  std::array<int,5> joint_state_id{0,1,2,3,4};
+  std::array<int,3> motor_id{6,5,4};
+  int kinematic_config = 1; //[1,2]
+  int leg_id = 1; 
+};
 
 class leg_controller {
   public:		
-    //TODO: initialize kinematis config, id
-    leg_controller():
-    kinematics(1),
-    id(0),
-    setpoint_arr(init_setpoint_array()),
-    qd(setpoint_arr.values.data())
-    {
+  leg_controller(const leg_controller_opt & opts):
+  joint_state_id(opts.joint_state_id),
+  kinematics(opts.kinematic_config),
+  id(opts.leg_id),
+  setpoint_arr(init_setpoint_array(opts.motor_id)),
+  qd(setpoint_arr.values.data()) 
+  {
       ros::NodeHandle nh;
       std::string leg_node_name = "leg1_node/";
       command_pub     = nh.advertise<cubemars_controller_ros_msgs::SetpointArray>(leg_node_name+"command_position",10);
@@ -27,7 +34,7 @@ class leg_controller {
       qd[1] = q[1];
       qd[2] = q[3];
 
-    }
+  }
 
   void Publish(){
     setpoint_arr.header.stamp = ros::Time::now();
@@ -37,10 +44,9 @@ class leg_controller {
   private:
 
   void status_callback(const sensor_msgs::JointStateConstPtr & joint_state ){
-    
     for (int i=0;i<5;i++){
-      q[i]  = joint_state->position[ joint_id[i] ];
-      qt[i] = joint_state->velocity[ joint_id[i] ];
+      q[i]  = joint_state->position[ joint_state_id[i] ];
+      qt[i] = joint_state->velocity[ joint_state_id[i] ];
     }
 
   //Debuggin:
@@ -53,27 +59,25 @@ class leg_controller {
   // --- 
   //
   // - It is needed so qd which is `Eigen::Map<Eigen::Vector3f>` can share the same memory with `setpoint_arr_.values`
-  cubemars_controller_ros_msgs::SetpointArray init_setpoint_array(){
-    //TODO: give correct motor ids based on leg
-    // maybe use joint_id
+  cubemars_controller_ros_msgs::SetpointArray init_setpoint_array(const std::array<int,3> & motor_id) const {
+
     cubemars_controller_ros_msgs::SetpointArray setpoint_arr_;
-    setpoint_arr_.ids.push_back(6);
-    setpoint_arr_.ids.push_back(5);
-    setpoint_arr_.ids.push_back(4);
-    setpoint_arr_.values.assign(3,0);
+    for (int id:motor_id){
+      setpoint_arr_.ids.push_back(id);
+      setpoint_arr_.values.push_back(0);
+    }
 
     return setpoint_arr_; 
 
   }
 
-  //TODO: give correct joint id from config
-  std::array<int,5> joint_id{0,1,2,3,4}; 
-  leg_kinematics kinematics;
   const int id; 
-  cubemars_controller_ros_msgs::SetpointArray setpoint_arr;
+  const std::array<int,5> joint_state_id; 
+  leg_kinematics kinematics;
 
   ros::Publisher command_pub;
   ros::Subscriber motor_state_sub;
+  cubemars_controller_ros_msgs::SetpointArray setpoint_arr;
 
   Eigen::Matrix<double,10,1> full_state;
   Eigen::Block<Eigen::Matrix<double,10,1>,5,1>  q = full_state.head<5>() ;  //alias for position part
@@ -97,8 +101,8 @@ double loop_freq = 100 ;
 ros::Rate loop_rate(loop_freq); //HZ
 #pragma endregion
 
-
-leg_controller controller ;
+leg_controller_opt fr_opts;
+leg_controller controller(fr_opts);
 
 while(ros::ok()){
   controller.Publish();
