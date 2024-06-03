@@ -10,6 +10,8 @@ project(mpc_controller)
 find_package(catkin REQUIRED COMPONENTS
   olympus_observer
   roscpp
+  sensor_msgs
+  cubemars_controller_ros_msgs
 )
 
 ## System dependencies are found with CMake's conventions
