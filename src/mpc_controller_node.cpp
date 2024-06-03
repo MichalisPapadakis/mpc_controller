@@ -26,7 +26,7 @@ class leg_controller {
   qd(setpoint_arr.values.data()) 
   {
       ros::NodeHandle nh;
-      std::string leg_node_name = "leg1_node/";
+      std::string leg_node_name = "leg"+ std::to_string(id+1)+"_node/";
       command_pub     = nh.advertise<cubemars_controller_ros_msgs::SetpointArray>(leg_node_name+"command_position",10);
       motor_state_sub = nh.subscribe("/joint_states",10,&leg_controller::status_callback,this);
 
@@ -40,16 +40,30 @@ class leg_controller {
       std::cout << "Current id is: " << id << std::endl;
       for (auto id:joint_state_id){std::cout << id << std::endl;}
       std::cout << "====" << std::endl;
-      for (auto id:opts.motor_id){std::cout << id << std::endl;}
+      for (auto id:setpoint_arr.ids){std::cout << int(id) << std::endl;}
 
   }
+
+  void setCommand(const Eigen::Vector3f & qd_){
+      qd = qd_;
+      Publish();
+  }
+
+  void setCommand(const std::vector<float> & qd_vec){
+      if (qd_vec.size()!=3){
+        ROS_ERROR_STREAM("[mpc_controller]: wrong vector size. Abort command");
+      }else{
+        setpoint_arr.values = qd_vec;
+        Publish();
+      }
+  }
+
+  private:
 
   void Publish(){
     setpoint_arr.header.stamp = ros::Time::now();
     command_pub.publish(setpoint_arr);
   }
-
-  private:
 
   void status_callback(const sensor_msgs::JointStateConstPtr & joint_state ){
     for (int i=0;i<5;i++){
@@ -103,7 +117,7 @@ class whole_body_controller {
     whole_body_controller() {
       ros::NodeHandle nh;
 
-      //get parameters:
+      //1. get parameters:
       std::string param_name;
 
       std::array<std::string,4> leg_prefix{ "fr","rr","fl","rl"};
@@ -113,19 +127,21 @@ class whole_body_controller {
       for (int i=0; i<4; i++){
         param_name = leg_prefix[i]+"_joint_state_ids";
         if ( !nh.getParam(param_name,joint_state_ids[i]) ){
-           ROS_INFO_STREAM("[mpc controller]: Couldn't read parameter: " << param_name);
+           ROS_ERROR_STREAM("[mpc controller]: Couldn't read parameter: " << param_name);
         }
 
         param_name = leg_prefix[i]+"_motor_ids";
         if ( !nh.getParam(param_name,motor_ids[i]) ){
-           ROS_INFO_STREAM("[mpc controller]: Couldn't read parameter: " << param_name);
+           ROS_ERROR_STREAM("[mpc controller]: Couldn't read parameter: " << param_name);
         }
       }
 
-      //create corresponding structs
+      //TODO: leg_order from config
+      std::array<int,4> leg_order{1,3,0,2};
+      //2. create corresponding leg controllers
       for (int i =0; i<4; i++){
         leg_controller_opt leg_opts;
-        leg_opts.leg_id = i;
+        leg_opts.leg_id = leg_order[i];
         leg_opts.kinematic_config = corresponding_kinematic_configuration(i) ;
 
         std::copy(motor_ids[i].begin(),motor_ids[i].end(),leg_opts.motor_id.begin());
@@ -134,9 +150,63 @@ class whole_body_controller {
         leg_controllers[i] = std::make_unique<leg_controller>(leg_opts);
       }
 
+      //3. trajectory timer
+      trajectory_timer = nh.createTimer(5,&whole_body_controller::trajectory_publish,this,true,false);
+      trajectory_timer.setPeriod( ros::Duration(1) );
+      trajectory_timer.start();
       ;
     }
+  
   private:
+
+  void allocation(const Eigen::Vector3f & qd_fr){
+    //initialize
+    Eigen::Vector3f qd_rr;
+    Eigen::Vector3f qd_fl;
+    Eigen::Vector3f qd_rl;
+
+    //matlab roll
+    if (cancel_roll){ 
+      qd_fl[0] = -qd_fr[0];
+    } else { 
+      qd_fl[0] = qd_fr[0] - 45;
+    }
+
+    //pitch-yaw
+    if (pitch_mode){
+      qd_fl[1] =  qd_fr[1];
+      qd_fl[2] = -qd_fr[2];
+    }else{
+      qd_fl[1] =  qd_fr[2];
+      qd_fl[2] = -qd_fr[1];
+    }
+
+    //Same side mimic:
+    qd_rr[0] = -qd_fr[0]; //ok
+    qd_rr[1] = -qd_fr[2];
+    qd_rr[2] =  qd_fr[1];
+
+    qd_rl[0] = -qd_fl[0]; //ok
+    qd_rl[1] = -qd_fl[2];
+    qd_rl[2] = -qd_fl[1];
+
+    std::array< const Eigen::Vector3f *, 4> qd{&qd_fr,&qd_rr,&qd_fl,&qd_rl};
+    for (int i=0; i<4; i++){ 
+      leg_controllers[i] -> setCommand( *qd[i] ); 
+      }
+
+  }
+
+  void trajectory_publish(const ros::TimerEvent&){
+    Eigen::Vector3f pos{45,60,-30};
+    allocation(pos);
+    trajectory_timer.stop();
+  }
+
+  bool cancel_roll = true;
+  bool pitch_mode  = false;
+
+  ros::Timer trajectory_timer;
   std::array< std::unique_ptr< leg_controller>,4> leg_controllers;
 };
 
@@ -154,7 +224,6 @@ ros::Rate loop_rate(loop_freq); //HZ
 whole_body_controller wbc;
 
 while(ros::ok()){
-  // controller.Publish();
   ros::spinOnce(); // Process any callbacks
   loop_rate.sleep();
 }
