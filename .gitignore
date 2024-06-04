@@ -1,1 +1,4 @@
 src/test*
+include/c_generated_code/*
+!include/c_generated_code/CMakeLists.txt
+!src/test_node.cpp

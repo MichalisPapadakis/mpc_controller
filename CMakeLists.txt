@@ -13,6 +13,7 @@ find_package(catkin REQUIRED COMPONENTS
   sensor_msgs
   cubemars_controller_ros_msgs
 )
+add_subdirectory(include/c_generated_code)
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -135,6 +136,7 @@ include
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
 add_executable(${PROJECT_NAME}_node src/mpc_controller_node.cpp)
+add_executable(test_acados src/test_node.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -151,6 +153,9 @@ target_link_libraries(${PROJECT_NAME}_node
   ${catkin_LIBRARIES}
 )
 
+target_include_directories(test_acados PRIVATE ${ACADOS_INCLUDE_DIRS} c_generated_code) 
+target_link_libraries(test_acados ${catkin_LIBRARIES}   acados_ocp_solver_fr_leg_pos )
+target_link_directories(test_acados PRIVATE ${ACADOS_LIB_PATH}) 
 #############
 ## Install ##
 #############
