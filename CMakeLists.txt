@@ -151,7 +151,11 @@ add_executable(test_acados src/test_node.cpp)
 ## Specify libraries to link a library or executable target against
 target_link_libraries(${PROJECT_NAME}_node
   ${catkin_LIBRARIES}
+  acados_ocp_solver_fr_leg_pos
 )
+
+target_include_directories(${PROJECT_NAME}_node PRIVATE ${ACADOS_INCLUDE_DIRS} c_generated_code) 
+target_link_directories(${PROJECT_NAME}_node PRIVATE ${ACADOS_LIB_PATH}) #to link agains libss
 
 target_include_directories(test_acados PRIVATE ${ACADOS_INCLUDE_DIRS} c_generated_code) 
 target_link_libraries(test_acados ${catkin_LIBRARIES}   acados_ocp_solver_fr_leg_pos )

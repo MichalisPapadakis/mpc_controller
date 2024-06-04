@@ -9,6 +9,23 @@
 #define corresponding_kinematic_configuration(leg_id) ( (i==0 || i==3)? 1: 2 ) 
 #define traj_stages 4
 
+#include <stdlib.h>
+// acados
+#include "acados/utils/math.h"
+#include "acados_c/ocp_nlp_interface.h"
+#include "acados_c/external_function_interface.h"
+#include "c_generated_code/acados_solver_fr_leg_pos.h" 
+
+// blasfeo
+#include "blasfeo/include/blasfeo_d_aux_ext_dep.h"
+
+//OCP defines:
+#define NX     FR_LEG_POS_NX 
+#define NU     FR_LEG_POS_NU 
+#define NBX0   FR_LEG_POS_NBX0 
+
+#define TH    0.3
+
 //This are read from a config in WBC class
 struct leg_controller_opt{
   std::array<int,5> joint_state_id{0,1,2,3,4};
@@ -40,6 +57,7 @@ class leg_controller {
       //Debugging:
       std::cout << "Current id is: " << id << std::endl;
       for (auto id:joint_state_id){std::cout << id << std::endl;}
+      std::cout <<"Kinematic config is:" << opts.kinematic_config << std::endl;
       std::cout << "====" << std::endl;
       for (auto id:setpoint_arr.ids){std::cout << int(id) << std::endl;}
 
@@ -57,6 +75,18 @@ class leg_controller {
         setpoint_arr.values = qd_vec;
         Publish();
       }
+  }
+
+  Eigen::Matrix<double,5,1> leg_state_estimation(const Eigen::Vector3d & qd){
+    return kinematics.state_estimation(qd);
+  }
+
+  Eigen::Matrix<double,10,1>  get_full_state() const {
+    return full_state; 
+  }
+
+  const Eigen::Matrix<double,10,1> *  get_full_state_ptr() const {
+    return &full_state; 
   }
 
   private:
@@ -154,13 +184,109 @@ class whole_body_controller {
 
       //3. trajectory timer
       trajectory_timer = nh.createTimer(5,&whole_body_controller::trajectory_publish,this);
-      trajectory_timer.setPeriod( ros::Duration(1) );
-      trajectory_timer.start();
-      ;
+      trajectory_timer.setPeriod( ros::Duration(TH/FR_LEG_POS_N) );
+      trajectory_timer.stop();
+      // trajectory_timer.start();
+      
+      xtraj.fill(0);
+      utraj.fill(0);
+      dt_traj.fill( TH/FR_LEG_POS_N );
+
+      //MPC initialization:
+      mpc_solver_init();
     }
-  
+
+  private:
+  //MPC specific:
+  void mpc_solver_init(){
+    acados_ocp_capsule = fr_leg_pos_acados_create_capsule();
+    double* new_time_steps = NULL;
+    int status = fr_leg_pos_acados_create_with_discretization(acados_ocp_capsule, N, new_time_steps);
+
+    if (status)
+    {
+        printf("fr_leg_pos_acados_create() returned status %d. Exiting.\n", status);
+        exit(1);
+    }
+
+    nlp_config = fr_leg_pos_acados_get_nlp_config(acados_ocp_capsule);
+    nlp_dims = fr_leg_pos_acados_get_nlp_dims(acados_ocp_capsule);
+    nlp_in = fr_leg_pos_acados_get_nlp_in(acados_ocp_capsule);
+    nlp_out = fr_leg_pos_acados_get_nlp_out(acados_ocp_capsule);
+    nlp_solver = fr_leg_pos_acados_get_nlp_solver(acados_ocp_capsule);
+    nlp_opts = fr_leg_pos_acados_get_nlp_opts(acados_ocp_capsule);
+
+    //constraint ids:
+    for (int id=0; id< NBX0 ; id++){ idxbx[id]=id; }
+  }
+
+  void mpc_update_constraints(double *x0, double * xf){
+    ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, 0, "idxbx", idxbx.data());
+    ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, 0, "lbx", x0);
+    ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, 0, "ubx", x0);
+
+    ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, N, "idxbx", idxbx.data());
+    ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, N, "lbx", xf);
+    ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, N, "ubx", xf);
+  }
+
+  void initialize_mpc(Eigen::Matrix<double,10,1> & x0, Eigen::Matrix<double,10,1> & xf ){
+    Eigen::Vector3d u0;
+    u0.setZero();
+
+    for (int i = 0; i < N; i++)
+    {
+        ocp_nlp_out_set(nlp_config, nlp_dims, nlp_out, i, "x", x0.data());
+        ocp_nlp_out_set(nlp_config, nlp_dims, nlp_out, i, "u", u0.data());
+    }
+    ocp_nlp_out_set(nlp_config, nlp_dims, nlp_out, N, "x", x0.data());
+  }
+
+  public:
+  void mpc_update_ocp(const Eigen::Vector3d & qdesired){
+    auto qd = leg_controllers[0]->leg_state_estimation(qdesired);
+
+    //TODO: fix kinematics to use setpoint based on command:
+    qd <<  0,1.8000,-1.1703,-0.7000,0.4087;
+
+    Eigen::Matrix<double,10,1> xd ;
+    xd.setZero();
+    xd.head(5) = qd;
+
+    ROS_INFO_STREAM("setpoint is:" <<qd); //devugging:
+
+    Eigen::Matrix<double,10,1> x0 ;
+    x0 = leg_controllers[0]->get_full_state()*M_PI/180;
+
+    mpc_update_constraints(x0.data(),xd.data());
+    initialize_mpc(x0,xd);
+
+    //update config
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "rti_phase", &mpc_counter);
+
+    //Solve: 
+    int status = fr_leg_pos_acados_solve(acados_ocp_capsule);
+
+    double elapsed_time;
+    //Get data:
+    ocp_nlp_get(nlp_config, nlp_solver, "time_tot", &elapsed_time);
+    elapsed_time = MIN(elapsed_time, 1e12);
+
+    //get solution
+    for (int ii = 0; ii <= nlp_dims->N; ii++)
+        ocp_nlp_out_get(nlp_config, nlp_dims, nlp_out, ii, "x", &xtraj[ii*NX]);
+    for (int ii = 0; ii < nlp_dims->N; ii++)
+        ocp_nlp_out_get(nlp_config, nlp_dims, nlp_out, ii, "u", &utraj[ii*NU]);
+
+    ROS_INFO("[mpc_controller]: MPC exited with status:  %d. Elapsed time: %.1f [ms]",status,1e3*elapsed_time);
+    trajectory_indexer = 0;
+    trajectory_timer.start();
+
+  }
+
   private:
 
+  //Controller support functions:
   void allocation(const Eigen::Vector3f & qd_fr){
     //initialize
     Eigen::Vector3f qd_rr;
@@ -200,13 +326,22 @@ class whole_body_controller {
   }
 
   void trajectory_publish(const ros::TimerEvent&){
-    int & i = trajectory_indexer;
-    Eigen::Vector3f pos(qMH_t[i],qHI_t[i],qHO_t[i]);
-    allocation(pos);
-    trajectory_timer.setPeriod( ros::Duration( traj_dt[i]) );
-    
+    int & i = trajectory_indexer ;
     i++;
-    if (i == traj_stages){i=0;}
+
+    // Eigen::Vector3f pos(qMH_t[i],qHI_t[i],qHO_t[i]);
+    double & qMH = xtraj[i*NX    ];
+    double & qHI = xtraj[i*NX +1 ];
+    double & qHO = xtraj[i*NX +3 ];
+
+    Eigen::Vector3f pos(qMH,qHI,qHO);
+    allocation(pos*180/M_PI);
+    trajectory_timer.setPeriod( ros::Duration( dt_traj[i-1]) );
+    
+    if (i == FR_LEG_POS_N+1){
+      i=0;
+      trajectory_timer.stop();
+    }
   }
 
   bool cancel_roll = true;
@@ -217,10 +352,26 @@ class whole_body_controller {
 
   //Saved trajectory:
   int trajectory_indexer = 0;
-  std::vector<double> qMH_t{0.0, 0.0, 0.0, 0.0};
-  std::vector<double> qHI_t{110.0, -60.0, 0.0, 100.0};
-  std::vector<double> qHO_t{110.0, 230.0, 0.0, -60.0};
-  std::vector<double> traj_dt {1, 1, 0.5, 1}; //dt
+
+  std::array<double,NX*(FR_LEG_POS_N+1)> xtraj;
+  std::array<double,NU* FR_LEG_POS_N   > utraj;
+  std::array<double,NX* FR_LEG_POS_N   > dt_traj;
+
+  //MPC specific:
+  fr_leg_pos_solver_capsule *acados_ocp_capsule;
+  ocp_nlp_config *nlp_config ;
+  ocp_nlp_dims *nlp_dims ;
+  ocp_nlp_in *nlp_in ;
+  ocp_nlp_out *nlp_out ;
+  ocp_nlp_solver *nlp_solver ;
+  void *nlp_opts ;
+
+  std::array<int,NBX0> idxbx;
+  int N = FR_LEG_POS_N; //Number of shooting intervals
+
+  //stats:
+  int mpc_counter = 0;
+
 };
 
 int main(int argc, char **argv) {
@@ -235,6 +386,11 @@ ros::Rate loop_rate(loop_freq); //HZ
 #pragma endregion
 
 whole_body_controller wbc;
+
+Eigen::Vector3d qd(0,1.8000,-0.7000);
+auto timer  = nh.createTimer(ros::Duration(5),
+[&wbc, qd](const ros::TimerEvent&) { wbc.mpc_update_ocp(qd); },true,true);
+
 
 while(ros::ok()){
   ros::spinOnce(); // Process any callbacks
