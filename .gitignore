@@ -1,4 +1,7 @@
 src/test*
 include/c_generated_code/*
+include/c_generated_code_SRBD/*
 !include/c_generated_code/CMakeLists.txt
+!include/c_generated_code_SRBD/CMakeLists.txt
 !src/test_node.cpp
+!src/test_node_SRBD.cpp
