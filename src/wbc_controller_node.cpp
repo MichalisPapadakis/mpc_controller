@@ -34,6 +34,10 @@ struct leg_controller_opt{
   int leg_id = 0; 
 };
 
+enum controller_mode { roll,pitch,yaw,stabilizing };
+
+enum phase {mid, reset, ext, torque };
+
 class leg_controller {
   public:		
   leg_controller(const leg_controller_opt & opts):
@@ -181,6 +185,10 @@ class whole_body_controller {
 
         leg_controllers[i] = std::make_unique<leg_controller>(leg_opts);
       }
+
+      // Controller Timers:
+      
+
 
       //3. trajectory timer
       trajectory_timer = nh.createTimer(5,&whole_body_controller::trajectory_publish,this);
@@ -351,7 +359,7 @@ class whole_body_controller {
   std::array< std::unique_ptr< leg_controller>,4> leg_controllers;
 
   //Saved trajectory:
-  int trajectory_indexer = 0;
+  // int trajectory_indexer = 0;
 
   std::array<double,NX*(FR_LEG_POS_N+1)> xtraj;
   std::array<double,NU* FR_LEG_POS_N   > utraj;
@@ -371,6 +379,29 @@ class whole_body_controller {
 
   //stats:
   int mpc_counter = 0;
+
+  // BODY PLANNER
+  Eigen::Quaterniond quat_current;
+  Eigen::Quaterniond quat_desired;
+  #define Nb 5
+  #define NXb 7
+  std::array<double, Nb*( NXb+1) > xtraj_b;   
+  std::array<double, Nb*( NXb  ) > utraj_b;   
+
+  ros::Subscriber olympus_pose_sub;
+  ros::Subscriber olympus_desired_pose_sub;
+
+  // LEG PLANNER
+  int mode  = 3;
+  int phase = 0;
+  std::array<const Eigen::Matrix<double,5,5> *,4> W_ptr;
+  std::array<const double *,4> thr_ptr;
+
+  Eigen::Matrix< double,10,1> q_leg;
+  int trajectory_indexer = 0;
+  std::array<double,NX*(FR_LEG_POS_N+1)> xtraj_l;
+  std::array<double,NU* FR_LEG_POS_N   > utraj_l;
+
 
 };
 

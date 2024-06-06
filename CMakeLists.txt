@@ -138,6 +138,9 @@ include
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
 add_executable(${PROJECT_NAME}_node src/mpc_controller_node.cpp)
+add_executable(wbc_controller_node src/wbc_controller_node.cpp)
+
+
 add_executable(test_acados src/test_node.cpp)
 add_executable(test_acados_SRBD src/test_node_SRBD.cpp)
 
@@ -156,9 +159,19 @@ target_link_libraries(${PROJECT_NAME}_node
   ${catkin_LIBRARIES}
   acados_ocp_solver_fr_leg_pos
 )
-
 target_include_directories(${PROJECT_NAME}_node PRIVATE ${ACADOS_INCLUDE_DIRS} c_generated_code) 
 target_link_directories(${PROJECT_NAME}_node PRIVATE ${ACADOS_LIB_PATH}) #to link agains libss
+
+target_link_libraries(wbc_controller_node
+  ${catkin_LIBRARIES}
+  acados_ocp_solver_fr_leg_pos
+  acados_ocp_solver_SRBD
+)
+target_include_directories(wbc_controller_node PRIVATE ${ACADOS_INCLUDE_DIRS} c_generated_code c_generated_code_SRBD) 
+target_link_directories(wbc_controller_node PRIVATE ${ACADOS_LIB_PATH}) #to link agains libss
+
+
+
 
 target_include_directories(test_acados PRIVATE ${ACADOS_INCLUDE_DIRS} c_generated_code) 
 target_link_libraries(test_acados ${catkin_LIBRARIES}   acados_ocp_solver_fr_leg_pos )
