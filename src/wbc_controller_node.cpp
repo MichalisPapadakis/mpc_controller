@@ -32,6 +32,8 @@
 
 #define TH    0.3
 
+#include "wbc_state_machine_params.hpp"
+
 //This are read from a config in WBC class
 struct leg_controller_opt{
   std::array<int,5> joint_state_id{0,1,2,3,4};
@@ -40,9 +42,7 @@ struct leg_controller_opt{
   int leg_id = 0; 
 };
 
-enum controller_mode { roll,pitch,yaw,stabilizing };
 
-enum phase {mid, reset, ext, torque };
 enum base_joint {weld, revolute_x, revolute_y, revolute_z, floating };
 
 class leg_controller {
@@ -224,6 +224,7 @@ class whole_body_controller {
       // body_planner_timer = nh.createTimer(5,&whole_body_controller::body_planner_update,this);
       // leg_planner_timer  = nh.createTimer(5,&whole_body_controller::leg_planner_update,this);
 
+      //reset
 
       //3. trajectory timer
       trajectory_timer = nh.createTimer(5,&whole_body_controller::trajectory_publish,this);
@@ -512,6 +513,56 @@ class whole_body_controller {
 
   void leg_planner_update(const ros::TimerEvent&){;}
 
+  // ===== RESET ALGO METHODS ========
+  void check_mode(){
+    //TODO: stabilization if close based on q_current*q_desired
+
+    int max_id = resetting::get_max_u_id(utraj_b.data());
+    int & new_mode = max_id; //alias
+    
+    //1. Check for very low torque:
+    if ( abs( utraj[max_id] ) < torque_magn_threshold ){
+      new_mode = controller_mode::stabilizing ; 
+    }
+
+    if (new_mode != current_mode){
+      //TODO: set corresponding reset -> eg. closest
+    } 
+
+    current_mode = controller_mode::yaw; 
+  }  
+
+  void check_phase(){
+    using namespace resetting ;
+    //1. read state from front_right leg
+    auto& q_fr = leg_controllers[0]->get_full_state_ptr()->head(5) ; 
+
+    //2. calculate error:
+    Eigen::Matrix<double,5,1> q_error = q_fr - q_interrupt;  
+    double error_norm = q_error.transpose() * W_interrupt * q_error ; 
+    ROS_INFO("[wbc controller] Error norm is: %f",error_norm);
+
+    //3. Check if resetting
+    if (error_norm < Th_intterupt){
+
+      //progress to next phase.
+      current_phase++;
+      if (current_phase == NUMBER_OF_PHASES){ //return to phase 0: mid
+        current_phase = phase::mid; 
+      }
+
+      //TODO: for every mode
+      //4. Update the Weighting matrices, current setpoint, threshold 
+      populate_diagonal(W_interrupt,*( yaw_W          [current_phase] ) );
+      populate_vector  (q_interrupt,*( yaw_setpoints  [current_phase] ) );
+      Th_intterupt = yaw_thresholds [current_phase ];
+    }
+
+
+
+  }
+
+
   //Controller support functions:
   void allocation(const Eigen::Vector3f & qd_fr){
     //initialize
@@ -626,9 +677,15 @@ class whole_body_controller {
 
   std::array<int,SRBD_NBX0> idxbx_b;
 
+  //Resetting algorithm
+  Eigen::Matrix<double,5,1> q_interrupt;
+  Eigen::Matrix<double,5,5> W_interrupt;
+  double Th_intterupt;
+
+  int current_mode  = controller_mode::stabilizing; //enum {r: 0, p: 1, y: 2, stabilization: 3} 
+  int current_phase = phase::mid; //enum. Always starts from mid
+
   // LEG PLANNER
-  int mode  = 3;
-  int phase = 0;
   std::array<const Eigen::Matrix<double,5,5> *,4> W_ptr;
   std::array<const double *,4> thr_ptr;
 
