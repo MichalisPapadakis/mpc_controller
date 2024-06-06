@@ -16,3 +16,7 @@ rl_motor_ids: [9,8,7]
 #SI: ShankInner
 #HO: HipOuter
 #SO: ShankOuter
+
+body_desired_pose_topic: "olympus/desired_angle"
+body_current_pose_topic: "/qualisys/olympus/odom"
+controller_mode : 2 #choose from [0: weld, 1: revolute_x, 2: revolute_y, 3: revolute_z, 4: floating]
