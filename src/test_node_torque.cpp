@@ -77,6 +77,7 @@ ros::NodeHandle nh;
     void *nlp_opts = fr_leg_torque_acados_get_nlp_opts(acados_ocp_capsule);
 
     // initial condition
+    #pragma region
     std::array<int,FR_LEG_TORQUE_NBX0> idxbx_l;
     for (int i=0; i < FR_LEG_TORQUE_NBX0 ; i++) { idxbx_l[i] = i;}
     
@@ -89,49 +90,54 @@ ros::NodeHandle nh;
     ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, 0, "lbx", x0.data());
     ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, 0, "ubx", x0.data());
 
+    #pragma endregion
+
+   
+    //Update weights:
+    #pragma region
+    
+    //Class variables
     Eigen::Matrix<double,17,1> W;
     Eigen::Matrix<double,10,1> Q;
 
     Eigen::Matrix<double,10,1> Wstate;
     Eigen::Matrix<double,3,1>  Wtrack;
     Eigen::Matrix<double,2,1>  Wu;
-    Eigen::Matrix<double,2,1>  Wclosure;    
+    Eigen::Matrix<double,2,1>  Wclosure; 
 
-
-    //Update weights:
-    #pragma region
-    
-    Wclosure.setZero();
-    Wu << 5,5;
+    //1. Update new phase constraints (7_values Wtrack:2, Wu, Wpos, Wvel, Qpos, Qvel) -> save in reset_defines
+    Wclosure.setZero() ;
     Wtrack << 5,5,160;
+    Wu     << 5,5;
     Wstate.head(5) << 0.01* Eigen::Matrix<double,5,1>::Ones();
     Wstate.tail(5) << 2   * Eigen::Matrix<double,5,1>::Ones();
     
     Q.head(5) << 0.01* Eigen::Matrix<double,5,1>::Ones();
     Q.tail(5) << 0.02* Eigen::Matrix<double,5,1>::Ones();
 
-
+    //2. Populate Consecutive Vector
     W.segment(0,3)  = Wtrack;
     W.segment(3,2)  = Wu;
     W.segment(5,2)  = Wclosure;
     W.segment(7,10) = Wstate; 
 
-    std::array<double,17*17> Wflatt;
-    std::array<double,10*10> Wflatt_e;
-    Wflatt.fill(0);
+    //3. Flatten diagonal arrays:
+    std::array<double,17*17> Wflatt; //Class Variable -> so i do not fill with 0 all the time
+    std::array<double,10*10> Wflatt_e; //Class Variable
+
+    Wflatt.fill(0); //constructor
     Wflatt_e.fill(0);
     
+
     for (int i=0;i<17 ; i++){
-        for(int j=0; j<17; j++){
-            Wflatt[i*17+j] = (i==j)? W[i] : 0;
-        }
-    }
-    for (int i=0;i<10 ; i++){
-        for(int j=0; j<10; j++){
-            Wflatt_e[i*10+j] = (i==j)? Q[i] : 0;
-        }
+        Wflatt[i*17+i] = W[i] ;
     }
 
+    for (int i=0;i<10 ; i++){
+        Wflatt_e[i*10+i] = Q[i] ;
+    }
+
+    //4. Update ocp structure
     for (int i = 0; i < N; i++){
         ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, i, "W", Wflatt.data());
     }
@@ -139,30 +145,29 @@ ros::NodeHandle nh;
     #pragma endregion
 
     
-    //Update referce
+    //Update reference
     #pragma region
-
-    Eigen::Vector3d tref_mh( 0,0,1 ) ;
+    //Class vars
+    Eigen::Vector3d tref_mh( 0,0,1 ) ; //Only this updates
     Eigen::Vector2d closure_ref(0,0);
     Eigen::Vector2d input_ref(0,0);
 
     Eigen::Matrix<double,FR_LEG_TORQUE_NX,1> xref;
     xref.tail(5).setZero();
+    //q_interrupt
     xref.head(5) << 1.4500,   -1.1000,    0.0816,    1.8500,    1.0829;
 
     Eigen::Matrix<double,17,1> y_ref ;
-    y_ref.segment(0,3) = tref_mh;
+    y_ref.segment(0,3) = tref_mh; //This updates
     y_ref.segment(3,2) = input_ref;
     y_ref.segment(5,2) = closure_ref;
-    y_ref.tail(10)     = xref;
+    y_ref.tail(10)     = xref; //This updates y_ref.segment(7,5) = q_interrupt
 
 
     for  (int i = 0; i < N; i++) {
         ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, i, "y_ref", y_ref.data());
     }
     ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, N, "y_ref", xref.data());
-
-
     #pragma endregion
 
 
