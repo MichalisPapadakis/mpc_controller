@@ -17,6 +17,7 @@ find_package(catkin REQUIRED COMPONENTS
 )
 add_subdirectory(include/c_generated_code) #position control
 add_subdirectory(include/c_generated_code_SRBD) #SRBD MPC
+add_subdirectory(include/c_generated_code_leg) #torque tracking MPC
 
 
 ## System dependencies are found with CMake's conventions
@@ -145,6 +146,7 @@ add_executable(wbc_controller_node src/wbc_controller_node.cpp)
 
 add_executable(test_acados src/test_node.cpp)
 add_executable(test_acados_SRBD src/test_node_SRBD.cpp)
+add_executable(test_acados_torque src/test_node_torque.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -182,6 +184,10 @@ target_link_directories(test_acados PRIVATE ${ACADOS_LIB_PATH})
 target_include_directories(test_acados_SRBD PRIVATE ${ACADOS_INCLUDE_DIRS}  c_generated_code_SRBD) 
 target_link_libraries(test_acados_SRBD ${catkin_LIBRARIES}    acados_ocp_solver_SRBD )
 target_link_directories(test_acados_SRBD PRIVATE ${ACADOS_LIB_PATH}) 
+
+target_include_directories(test_acados_torque PRIVATE ${ACADOS_INCLUDE_DIRS}  c_generated_code_leg) 
+target_link_libraries(test_acados_torque ${catkin_LIBRARIES}    acados_ocp_solver_fr_leg_torque )
+target_link_directories(test_acados_torque PRIVATE ${ACADOS_LIB_PATH}) 
 #############
 ## Install ##
 #############
