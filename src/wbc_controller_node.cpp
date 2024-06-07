@@ -221,6 +221,7 @@ class whole_body_controller {
       phase_publisher = nh.advertise<mpc_controller::phase>("controller_current_phase",10);
 
       //TODO: remove them after logic for mode:
+      W_interrupt.setZero();
       resetting::populate_diagonal(W_interrupt,*( resetting::yaw_W          [current_phase] ) );
       resetting::populate_vector  (q_interrupt,*( resetting::yaw_setpoints  [current_phase] ) );
       Th_intterupt = resetting::yaw_thresholds [current_phase ];
@@ -232,12 +233,11 @@ class whole_body_controller {
 
       //4.  Controller Timers:
       // body_planner_timer = nh.createTimer(5,&whole_body_controller::body_planner_update,this); 
-      // leg_planner_timer  = nh.createTimer(5,&whole_body_controller::leg_planner_update,this);
+      leg_planner_timer  = nh.createTimer(ros::Duration(TH_L),&whole_body_controller::leg_planner_update,this);
       //  trajectory timer
-      trajectory_timer = nh.createTimer(5,&whole_body_controller::trajectory_publish,this);
-      trajectory_timer.setPeriod( ros::Duration(TH_L/FR_LEG_TORQUE_N) );
+      trajectory_timer = nh.createTimer(ros::Duration(TH_L/FR_LEG_TORQUE_N),&whole_body_controller::trajectory_publish,this);
+      // trajectory_timer = nh.createTimer(ros::Duration(2),&whole_body_controller::trajectory_publish,this);
       trajectory_timer.stop();
-      // trajectory_timer.start();
       
       //MPC initialization:
       body_planner_solver_init();
@@ -419,8 +419,7 @@ class whole_body_controller {
     d_print_exp_tran_mat( SRBD_NX, N_b+1, xtraj_b.data(), SRBD_NX);
     printf("\n--- utraj ---\n");
     d_print_exp_tran_mat( SRBD_NU, N_b, utraj_b.data(), SRBD_NU );
-    // trajectory_indexer = 0;
-    // trajectory_timer.start();
+
 
   }
 
@@ -464,7 +463,7 @@ class whole_body_controller {
     Q.tail(5) << 0.02* Eigen::Matrix<double,5,1>::Ones();
 
     // Reference:
-    tref_mh     << 0,0,0;
+    tref_mh     << 0,0,1;
     closure_ref << 0,0;
     input_ref   << 0,0;
     qref        = q_interrupt; 
@@ -509,8 +508,8 @@ class whole_body_controller {
     //3. Set reference
     // y_ref.segment(0,3) = tref_mh; 
     // y_ref.segment(7,5) = q_interrupt; //TODO -> VALE INTERRUPT
-    y_ref.segment(0,3) << 0,0,1;
-    y_ref.segment(7,5) <<  1.4500,   -1.1000,    0.0816,    1.8500,    1.0829;
+    // y_ref.segment(0,3) << 0,0,1;
+    // y_ref.segment(7,5) <<  1.4500,   -1.1000,    0.0816,    1.8500,    1.0829;
 
     for  (int i = 0; i < N_l; i++) {
         ocp_nlp_cost_model_set(nlp_config_leg, nlp_dims_leg, nlp_in_leg, i, "y_ref", y_ref.data());
@@ -542,9 +541,9 @@ class whole_body_controller {
   void leg_planner_update(const ros::TimerEvent&){
 
     Eigen::Matrix<double,10,1> x0 ;
-    x0 = leg_controllers[0]->get_full_state()*M_PI/180; //get fr leg state
 
-    x0.setZero();
+    //TODO: what value am i reading? deg or rads?
+    x0 = leg_controllers[0]->get_full_state();//*M_PI/180; //get fr leg state
     
     leg_planner_update_constraints(x0.data());
     leg_planner_initialize_solution(x0);
@@ -568,12 +567,21 @@ class whole_body_controller {
 
     ROS_INFO("[mpc_controller]: Leg planner MPC exited with status:  %d. Elapsed time: %.1f [ms]",status,1e3*elapsed_time);
     trajectory_indexer = 0;
+    trajectory_timer.stop();
+    trajectory_publish_();
     trajectory_timer.start();
 
     printf("\n--- xtraj ---\n");
     d_print_exp_tran_mat( FR_LEG_TORQUE_NX, N_l+1, xtraj_l.data(), FR_LEG_TORQUE_NX);
     printf("\n--- utraj ---\n");
     d_print_exp_tran_mat( FR_LEG_TORQUE_NU, N_l, utraj_l.data(), FR_LEG_TORQUE_NU );
+
+    // ROS_INFO_STREAM("qint" << q_interrupt);
+    // ROS_INFO_STREAM("yref" << y_ref);
+    // ROS_INFO_STREAM("x0"   << x0);
+    // ROS_INFO_STREAM("W"   << W);
+    // ROS_INFO_STREAM("Q"   << Q);
+
 
   }
 
@@ -616,6 +624,18 @@ class whole_body_controller {
 
       //TODO: for every mode
       //4. Update the Weighting matrices, current setpoint, threshold 
+      update_reset_algorithm_quantities();
+    }
+
+    phase_msg.error = error_norm;
+    phase_msg.phase = static_cast<u_int8_t>( current_phase ) ;
+    phase_msg.header.stamp  =ros::Time::now();
+    phase_publisher.publish(phase_msg);
+  }
+
+  void update_reset_algorithm_quantities(){
+    // RESET SELF QUANTITIES:
+    using namespace resetting ;
       populate_diagonal(W_interrupt,*( yaw_W          [current_phase] ) );
       populate_vector  (q_interrupt,*( yaw_setpoints  [current_phase] ) );
       Th_intterupt = yaw_thresholds [current_phase ];
@@ -624,15 +644,12 @@ class whole_body_controller {
       ROS_INFO("[wbc controller]: Current setpoint is: [%.1f,%.1f,%.1f]",q_interrupt[0]*conv,q_interrupt[1]*conv,q_interrupt[3]*conv);
       ROS_INFO("[wbc controller]: Current phase is : %d",current_phase);
       ROS_INFO("[wbc controller]: Current threshold  is : %.1f",Th_intterupt);
-    }
 
-    phase_msg.error = error_norm;
-    phase_msg.phase = static_cast<u_int8_t>( current_phase ) ;
-    phase_msg.header.stamp  =ros::Time::now();
-    phase_publisher.publish(phase_msg);
-
-
+      // MPC WEIGHTS SELF QUANTITIES:
+      //TODO: change cost function weights
+      qref = q_interrupt; 
   }
+
 
   // ===== TRAJECTORY PLAYBACK FUNCTIONS ========
   private:
@@ -675,6 +692,12 @@ class whole_body_controller {
   }
 
   void trajectory_publish(const ros::TimerEvent&){
+    ROS_INFO("publishing trajectory from timer");
+    trajectory_publish_();
+  }
+
+  void trajectory_publish_(){
+    ROS_INFO("publishing trajectory");
     int & i = trajectory_indexer ;
     i++;
 
@@ -687,10 +710,12 @@ class whole_body_controller {
     allocation(pos*180/M_PI);
     
     if (i == FR_LEG_TORQUE_N+1){
+      ROS_INFO_STREAM("reaching end of traj");
       i=0;
       trajectory_timer.stop();
     }
   }
+
 
   // ===== CONTROLLER ELEMENTS ========
   private:
@@ -749,7 +774,7 @@ class whole_body_controller {
   int current_phase = phase::mid;                   //enum. Always starts from mid
 
   bool cancel_roll = true;                          //TODO: maybe do not use
-  bool pitch_mode  = true;
+  bool pitch_mode  = false;
 
   ros::Publisher phase_publisher;
   mpc_controller::phase phase_msg;
@@ -788,7 +813,7 @@ class whole_body_controller {
   Eigen::Block< Eigen::Matrix<double,FR_LEG_TORQUE_NYREF,1>,3,1>  tref_mh     = y_ref.segment<3>(0); 
   Eigen::Block< Eigen::Matrix<double,FR_LEG_TORQUE_NYREF,1>,2,1>  input_ref   = y_ref.segment<2>(3); 
   Eigen::Block< Eigen::Matrix<double,FR_LEG_TORQUE_NYREF,1>,2,1>  closure_ref = y_ref.segment<2>(5); 
-  Eigen::Block< Eigen::Matrix<double,FR_LEG_TORQUE_NYREF,1>,5,1> qref         = y_ref.segment<5>(7); 
+  Eigen::Block< Eigen::Matrix<double,FR_LEG_TORQUE_NYREF,1>,5,1>  qref        = y_ref.segment<5>(7); 
   
   // --- solver ---:
   fr_leg_torque_solver_capsule *acados_ocp_capsule_leg;
