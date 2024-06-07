@@ -168,10 +168,10 @@ target_link_directories(${PROJECT_NAME}_node PRIVATE ${ACADOS_LIB_PATH}) #to lin
 
 target_link_libraries(wbc_controller_node
   ${catkin_LIBRARIES}
-  acados_ocp_solver_fr_leg_pos
   acados_ocp_solver_SRBD
+  acados_ocp_solver_fr_leg_torque
 )
-target_include_directories(wbc_controller_node PRIVATE ${ACADOS_INCLUDE_DIRS} c_generated_code c_generated_code_SRBD) 
+target_include_directories(wbc_controller_node PRIVATE ${ACADOS_INCLUDE_DIRS} c_generated_code_SRBD c_generated_code_leg) 
 target_link_directories(wbc_controller_node PRIVATE ${ACADOS_LIB_PATH}) #to link agains libss
 
 

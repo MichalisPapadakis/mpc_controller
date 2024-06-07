@@ -18,22 +18,16 @@
 #include "acados/utils/print.h"
 #include "acados_c/ocp_nlp_interface.h"
 #include "acados_c/external_function_interface.h"
-#include "c_generated_code/acados_solver_fr_leg_pos.h" 
-
-// body planner includes:
-#include "c_generated_code_SRBD/acados_solver_SRBD.h"
-
-// blasfeo
 #include "blasfeo/include/blasfeo_d_aux_ext_dep.h"
 
-//OCP defines:
-#define NX     FR_LEG_POS_NX 
-#define NU     FR_LEG_POS_NU 
-#define NBX0   FR_LEG_POS_NBX0 
+// mpc planner includes:
+#include "c_generated_code_SRBD/acados_solver_SRBD.h"
+#include "c_generated_code_leg/acados_solver_fr_leg_torque.h"
 
-#define TH    0.3
-
+// WBC defines:
 #include "wbc_state_machine_params.hpp"
+#define TH_L 0.1
+#define TH_B 0.1
 
 //This are read from a config in WBC class
 struct leg_controller_opt{
@@ -162,6 +156,7 @@ class whole_body_controller {
       ros::NodeHandle nh_param("~");
 
       //1. get parameters:
+      #pragma region
       std::string param_name;
 
       std::array<std::string,4> leg_prefix{ "fr","rr","fl","rl"};
@@ -180,7 +175,6 @@ class whole_body_controller {
         }
       }
 
-      //TODO: read from config:
       std::string body_current_pose_topic = "/qualisys/olympus/odom"; 
       std::string body_desired_pose_topic= "olympus/desired_angle";
       if ( !nh_param.getParam("body_current_pose_topic",body_current_pose_topic) ){
@@ -193,7 +187,6 @@ class whole_body_controller {
       int controller_mode_param = 0;
       if ( !nh_param.getParam("controller_mode",controller_mode_param) ){
            ROS_ERROR_STREAM("[mpc controller]: Couldn't read parameter: controller_mode. Selecting floating controller mode ");
-           controller_config = base_joint::floating;
       }else{
         if (controller_mode_param > 4){
           ROS_ERROR_STREAM("[mpc controller]: Wrong controller mode. Allowed are: [0: weld, 1: revolute_x, 2: revolute_y, 3: revolute_z, 4: floating] ");
@@ -205,6 +198,9 @@ class whole_body_controller {
 
       //TODO: leg_order from config
       std::array<int,4> leg_order{1,3,0,2};
+
+      #pragma endregion
+      
       //2. create corresponding leg controllers
       for (int i =0; i<4; i++){
         leg_controller_opt leg_opts;
@@ -221,11 +217,7 @@ class whole_body_controller {
       olympus_current_pose_sub = nh.subscribe(body_current_pose_topic,10,&whole_body_controller::body_current_pose_update,this);
       olympus_desired_pose_sub = nh.subscribe(body_desired_pose_topic,10,&whole_body_controller::body_desired_pose_update,this);
 
-      // Controller Timers:
-      // body_planner_timer = nh.createTimer(5,&whole_body_controller::body_planner_update,this);
-      // leg_planner_timer  = nh.createTimer(5,&whole_body_controller::leg_planner_update,this);
-
-      //reset
+      //3.  Reseting init
       phase_publisher = nh.advertise<mpc_controller::phase>("controller_current_phase",10);
 
       //TODO: remove them after logic for mode:
@@ -238,109 +230,19 @@ class whole_body_controller {
       ROS_INFO("[wbc controller]: Current phase is : %d",current_phase);
       ROS_INFO("[wbc controller]: Current threshold  is : %.1f",Th_intterupt);
 
-
-      //3. trajectory timer
+      //4.  Controller Timers:
+      // body_planner_timer = nh.createTimer(5,&whole_body_controller::body_planner_update,this); 
+      // leg_planner_timer  = nh.createTimer(5,&whole_body_controller::leg_planner_update,this);
+      //  trajectory timer
       trajectory_timer = nh.createTimer(5,&whole_body_controller::trajectory_publish,this);
-      trajectory_timer.setPeriod( ros::Duration(TH/FR_LEG_POS_N) );
+      trajectory_timer.setPeriod( ros::Duration(TH_L/FR_LEG_TORQUE_N) );
       trajectory_timer.stop();
       // trajectory_timer.start();
       
-      xtraj.fill(0);
-      utraj.fill(0);
-      dt_traj.fill( TH/FR_LEG_POS_N );
-
       //MPC initialization:
-      mpc_solver_init();
       body_planner_solver_init();
+      leg_planner_solver_init();
     }
-
-  private:
-  //MPC specific:
-  void mpc_solver_init(){
-    acados_ocp_capsule = fr_leg_pos_acados_create_capsule();
-    double* new_time_steps = NULL;
-    int status = fr_leg_pos_acados_create_with_discretization(acados_ocp_capsule, N, new_time_steps);
-
-    if (status)
-    {
-        printf("fr_leg_pos_acados_create() returned status %d. Exiting.\n", status);
-        exit(1);
-    }
-
-    nlp_config = fr_leg_pos_acados_get_nlp_config(acados_ocp_capsule);
-    nlp_dims = fr_leg_pos_acados_get_nlp_dims(acados_ocp_capsule);
-    nlp_in = fr_leg_pos_acados_get_nlp_in(acados_ocp_capsule);
-    nlp_out = fr_leg_pos_acados_get_nlp_out(acados_ocp_capsule);
-    nlp_solver = fr_leg_pos_acados_get_nlp_solver(acados_ocp_capsule);
-    nlp_opts = fr_leg_pos_acados_get_nlp_opts(acados_ocp_capsule);
-
-    //constraint ids:
-    for (int id=0; id< NBX0 ; id++){ idxbx[id]=id; }
-  }
-
-  void mpc_update_constraints(double *x0, double * xf){
-    ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, 0, "idxbx", idxbx.data());
-    ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, 0, "lbx", x0);
-    ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, 0, "ubx", x0);
-
-    ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, N, "idxbx", idxbx.data());
-    ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, N, "lbx", xf);
-    ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, N, "ubx", xf);
-  }
-
-  void initialize_mpc(Eigen::Matrix<double,10,1> & x0, Eigen::Matrix<double,10,1> & xf ){
-    Eigen::Vector3d u0;
-    u0.setZero();
-
-    for (int i = 0; i < N; i++)
-    {
-        ocp_nlp_out_set(nlp_config, nlp_dims, nlp_out, i, "x", x0.data());
-        ocp_nlp_out_set(nlp_config, nlp_dims, nlp_out, i, "u", u0.data());
-    }
-    ocp_nlp_out_set(nlp_config, nlp_dims, nlp_out, N, "x", x0.data());
-  }
-
-  public:
-  void mpc_update_ocp(const Eigen::Vector3d & qdesired){
-    auto qd = leg_controllers[0]->leg_state_estimation(qdesired);
-
-    //TODO: fix kinematics to use setpoint based on command:
-    qd <<  0,1.8000,-1.1703,-0.7000,0.4087;
-
-    Eigen::Matrix<double,10,1> xd ;
-    xd.setZero();
-    xd.head(5) = qd;
-
-    ROS_INFO_STREAM("setpoint is:" <<qd); //devugging:
-
-    Eigen::Matrix<double,10,1> x0 ;
-    x0 = leg_controllers[0]->get_full_state()*M_PI/180;
-
-    mpc_update_constraints(x0.data(),xd.data());
-    initialize_mpc(x0,xd);
-
-    //update config
-    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "rti_phase", &mpc_counter);
-
-    //Solve: 
-    int status = fr_leg_pos_acados_solve(acados_ocp_capsule);
-
-    double elapsed_time;
-    //Get data:
-    ocp_nlp_get(nlp_config, nlp_solver, "time_tot", &elapsed_time);
-    elapsed_time = MIN(elapsed_time, 1e12);
-
-    //get solution
-    for (int ii = 0; ii <= nlp_dims->N; ii++)
-        ocp_nlp_out_get(nlp_config, nlp_dims, nlp_out, ii, "x", &xtraj[ii*NX]);
-    for (int ii = 0; ii < nlp_dims->N; ii++)
-        ocp_nlp_out_get(nlp_config, nlp_dims, nlp_out, ii, "u", &utraj[ii*NU]);
-
-    ROS_INFO("[mpc_controller]: MPC exited with status:  %d. Elapsed time: %.1f [ms]",status,1e3*elapsed_time);
-    trajectory_indexer = 0;
-    trajectory_timer.start();
-
-  }
 
   private:
 
@@ -420,7 +322,7 @@ class whole_body_controller {
 
 
   // ===== BODY PLANNER METHODS ========
-
+  private:
   void body_planner_solver_init(){
     acados_ocp_capsule_SRBD = SRBD_acados_create_capsule();
     // there is an opportunity to change the number of shooting intervals in C without new code generation
@@ -523,8 +425,151 @@ class whole_body_controller {
   }
 
   // ===== LEG PLANNER METHODS ========
+  private:
+  void leg_planner_solver_init(){
+    acados_ocp_capsule_leg = fr_leg_torque_acados_create_capsule();
+    // there is an opportunity to change the number of shooting intervals in C without new code generation
+    N_l = FR_LEG_TORQUE_N;
+    // allocate the array and fill it accordingly
+    double* new_time_steps = NULL;
+    int status = fr_leg_torque_acados_create_with_discretization(acados_ocp_capsule_leg, N_l, new_time_steps);
 
-  void leg_planner_update(const ros::TimerEvent&){;}
+    if (status)
+    {
+        printf("fr_leg_torque_acados_create() returned status %d. Exiting.\n", status);
+        exit(1);
+    }
+
+    nlp_config_leg = fr_leg_torque_acados_get_nlp_config(acados_ocp_capsule_leg);
+    nlp_dims_leg = fr_leg_torque_acados_get_nlp_dims(acados_ocp_capsule_leg);
+    nlp_in_leg = fr_leg_torque_acados_get_nlp_in(acados_ocp_capsule_leg);
+    nlp_out_leg = fr_leg_torque_acados_get_nlp_out(acados_ocp_capsule_leg);
+    nlp_solver_leg = fr_leg_torque_acados_get_nlp_solver(acados_ocp_capsule_leg);
+    nlp_opts_leg = fr_leg_torque_acados_get_nlp_opts(acados_ocp_capsule_leg);
+
+    for (int i=0; i < FR_LEG_TORQUE_NBX0 ; i++) { idxbx_l[i] = i;}
+
+    //Give default values:
+    Wflatt.fill(0); 
+    Wflatt_e.fill(0);
+
+    Wclosure.setZero() ;
+    Wtrack << 5,5,160;
+    Wu     << 5,5;
+    Wstate.head(5) << 0.01* Eigen::Matrix<double,5,1>::Ones();
+    Wstate.tail(5) << 2   * Eigen::Matrix<double,5,1>::Ones();
+    
+    Q.head(5) << 0.01* Eigen::Matrix<double,5,1>::Ones();
+    Q.tail(5) << 0.02* Eigen::Matrix<double,5,1>::Ones();
+
+    W.segment(0,3)  = Wtrack;
+    W.segment(3,2)  = Wu;
+    W.segment(5,2)  = Wclosure;
+    W.segment(7,10) = Wstate; 
+
+    // Reference:
+    tref_mh     << 0,0,0;
+    closure_ref << 0,0;
+    input_ref   << 0,0;
+
+    y_ref.segment(0,3) = tref_mh; //This updates
+    y_ref.segment(3,2) = input_ref;
+    y_ref.segment(5,2) = closure_ref;
+    y_ref.segment(7,5) = q_interrupt;
+    y_ref.tail(5).setZero();
+
+    //Initialize result:
+    xtraj_l.fill(0);
+    utraj_l.fill(0);
+
+  }
+
+  void leg_planner_update_constraints(double *x0){
+    ocp_nlp_constraints_model_set(nlp_config_leg, nlp_dims_leg, nlp_in_leg, 0, "idxbx", idxbx_l.data());
+    ocp_nlp_constraints_model_set(nlp_config_leg, nlp_dims_leg, nlp_in_leg, 0, "lbx", x0);
+    ocp_nlp_constraints_model_set(nlp_config_leg, nlp_dims_leg, nlp_in_leg, 0, "ubx", x0);
+  }
+
+  void leg_plannet_update_weightsANDreference(){
+    //1. Populate FlattenWeights with new values:
+    for (int i=0;i<17 ; i++){
+        Wflatt[i*17+i] = W[i] ;
+    }
+
+    for (int i=0;i<10 ; i++){
+        Wflatt_e[i*10+i] = Q[i] ;
+    }
+
+    //2. Update the ocp struct
+    for (int i = 0; i < N_l; i++){
+        ocp_nlp_cost_model_set(nlp_config_leg, nlp_dims_leg, nlp_in_leg, i, "W", Wflatt.data());
+    }
+    ocp_nlp_cost_model_set(nlp_config_leg, nlp_dims_leg, nlp_in_leg, N_l, "W", Wflatt_e.data());
+    
+    //3. Set reference
+    // y_ref.segment(0,3) = tref_mh; 
+    // y_ref.segment(7,5) = q_interrupt; //TODO -> VALE INTERRUPT
+    y_ref.segment(0,3) << 0,0,1;
+    y_ref.segment(7,5) <<  1.4500,   -1.1000,    0.0816,    1.8500,    1.0829;
+
+    for  (int i = 0; i < N_l; i++) {
+        ocp_nlp_cost_model_set(nlp_config_leg, nlp_dims_leg, nlp_in_leg, i, "y_ref", y_ref.data());
+    }
+    ocp_nlp_cost_model_set(nlp_config_leg, nlp_dims_leg, nlp_in_leg, N_l, "y_ref", y_ref.tail(10).data());
+
+  }
+
+  void leg_planner_initialize_solution(Eigen::Matrix<double,FR_LEG_TORQUE_NBX,1> & x0){
+    Eigen::Vector3d u0;
+    u0.setZero();
+    for (int i = 0; i < N_l; i++)
+    {
+        ocp_nlp_out_set(nlp_config_leg, nlp_dims_leg, nlp_out_leg, i, "x", x0.data());
+        ocp_nlp_out_set(nlp_config_leg, nlp_dims_leg, nlp_out_leg, i, "u", u0.data());
+    }
+    ocp_nlp_out_set(nlp_config_leg, nlp_dims_leg, nlp_out_leg, N_l, "x", x0.data());
+
+  }
+
+  public:
+  void leg_planner_update(const ros::TimerEvent&){
+
+    Eigen::Matrix<double,10,1> x0 ;
+    x0 = leg_controllers[0]->get_full_state()*M_PI/180; //get fr leg state
+
+    x0.setZero();
+    
+    leg_planner_update_constraints(x0.data());
+    leg_planner_initialize_solution(x0);
+    leg_plannet_update_weightsANDreference();
+
+    //update config
+    ocp_nlp_solver_opts_set(nlp_config_leg, nlp_opts_leg, "rti_phase", &leg_planner_counter);
+
+    //Solve: 
+    int status = fr_leg_torque_acados_solve(acados_ocp_capsule_leg);
+
+    double elapsed_time;
+    //Get data:
+    ocp_nlp_get(nlp_config_leg, nlp_solver_leg, "time_tot", &elapsed_time);
+    elapsed_time = MIN(elapsed_time, 1e12);
+
+    //get solution
+    for (int ii = 0; ii <= nlp_dims_leg->N; ii++)
+        ocp_nlp_out_get(nlp_config_leg, nlp_dims_leg, nlp_out_leg, ii, "x", &xtraj_l[ii*FR_LEG_TORQUE_NX]);
+    for (int ii = 0; ii < nlp_dims_leg->N; ii++)
+        ocp_nlp_out_get(nlp_config_leg, nlp_dims_leg, nlp_out_leg, ii, "u", &utraj_l[ii*FR_LEG_TORQUE_NU]);
+
+    ROS_INFO("[mpc_controller]: Leg planner MPC exited with status:  %d. Elapsed time: %.1f [ms]",status,1e3*elapsed_time);
+    trajectory_indexer = 0;
+    trajectory_timer.start();
+
+    printf("\n--- xtraj ---\n");
+    d_print_exp_tran_mat( FR_LEG_TORQUE_NX, N_l+1, xtraj_l.data(), FR_LEG_TORQUE_NX);
+    printf("\n--- utraj ---\n");
+    d_print_exp_tran_mat( FR_LEG_TORQUE_NU, N_l, utraj_l.data(), FR_LEG_TORQUE_NU );
+
+  }
 
   // ===== RESET ALGO METHODS ========
   void check_mode(){
@@ -534,7 +579,7 @@ class whole_body_controller {
     int & new_mode = max_id; //alias
     
     //1. Check for very low torque:
-    if ( abs( utraj[max_id] ) < torque_magn_threshold ){
+    if ( abs( utraj_b[max_id] ) < torque_magn_threshold ){
       new_mode = controller_mode::stabilizing ; 
     }
 
@@ -580,13 +625,11 @@ class whole_body_controller {
     phase_msg.header.stamp  =ros::Time::now();
     phase_publisher.publish(phase_msg);
 
-    
-
 
   }
 
-
-  //Controller support functions:
+  // ===== TRAJECTORY PLAYBACK FUNCTIONS ========
+  private:
   void allocation(const Eigen::Vector3f & qd_fr){
     //initialize
     Eigen::Vector3f qd_rr;
@@ -630,66 +673,51 @@ class whole_body_controller {
     i++;
 
     // Eigen::Vector3f pos(qMH_t[i],qHI_t[i],qHO_t[i]);
-    double & qMH = xtraj[i*NX    ];
-    double & qHI = xtraj[i*NX +1 ];
-    double & qHO = xtraj[i*NX +3 ];
+    double & qMH = xtraj_l[i*FR_LEG_TORQUE_NX    ];
+    double & qHI = xtraj_l[i*FR_LEG_TORQUE_NX +1 ];
+    double & qHO = xtraj_l[i*FR_LEG_TORQUE_NX +3 ];
 
     Eigen::Vector3f pos(qMH,qHI,qHO);
     allocation(pos*180/M_PI);
-    trajectory_timer.setPeriod( ros::Duration( dt_traj[i-1]) );
     
-    if (i == FR_LEG_POS_N+1){
+    if (i == FR_LEG_TORQUE_N+1){
       i=0;
       trajectory_timer.stop();
     }
   }
 
-  bool cancel_roll = true;
-  bool pitch_mode  = true;
-
+  // ===== CONTROLLER ELEMENTS ========
+  private:
+  int trajectory_indexer = 0;
   ros::Timer trajectory_timer;
   std::array< std::unique_ptr< leg_controller>,4> leg_controllers;
 
-  //Saved trajectory:
-  // int trajectory_indexer = 0;
-
-  std::array<double,NX*(FR_LEG_POS_N+1)> xtraj;
-  std::array<double,NU* FR_LEG_POS_N   > utraj;
-  std::array<double,NX* FR_LEG_POS_N   > dt_traj;
-
-  //MPC specific:
-  fr_leg_pos_solver_capsule *acados_ocp_capsule;
-  ocp_nlp_config *nlp_config ;
-  ocp_nlp_dims *nlp_dims ;
-  ocp_nlp_in *nlp_in ;
-  ocp_nlp_out *nlp_out ;
-  ocp_nlp_solver *nlp_solver ;
-  void *nlp_opts ;
-
-  std::array<int,NBX0> idxbx;
-  int N = FR_LEG_POS_N; //Number of shooting intervals
-  int N_b = SRBD_N; //Number of shooting intervals for body planner
-  //stats:
-  int mpc_counter = 0;
   int body_planner_counter = 0;
+  int leg_planner_counter = 0;
 
-  //controller configuration
-  int controller_config = base_joint::revolute_x; //weather base is fixed or not
+  int controller_config = base_joint::floating; //weather base is fixed or not -> how to read values
 
-  // BODY PLANNER
-  Eigen::Quaterniond quat_current;
-  Eigen::Vector3d twist_current;
-  Eigen::Quaterniond quat_desired;
-  #define Nb 5
-  #define NXb 7
-  std::array<double, Nb*( NXb+1) > xtraj_b;   
-  std::array<double, Nb*( NXb  ) > utraj_b;   
-
+  // ===== BODY PLANNER PARAMETERS ========
+  #pragma region
+  // --- ros specific ---:
   ros::Timer body_planner_timer;
   ros::Subscriber olympus_current_pose_sub;
   ros::Subscriber olympus_desired_pose_sub;
 
-  // solver:
+  int N_b = SRBD_N; //Number of shooting intervals for body planner
+
+  // --- states ---:
+  Eigen::Quaterniond quat_current;
+  Eigen::Vector3d    twist_current;
+  Eigen::Quaterniond quat_desired;
+
+  // --- trajectory ---:
+  #define Nb 5
+  #define NXb 7
+  std::array<double, Nb*( NXb+1) > xtraj_b;   
+  std::array<double, Nb*( NXb  ) > utraj_b; 
+
+  // --- solver ---:
   SRBD_solver_capsule *acados_ocp_capsule_SRBD;
   ocp_nlp_config *nlp_config_SRBD ;
   ocp_nlp_dims *nlp_dims_SRBD ;
@@ -700,28 +728,70 @@ class whole_body_controller {
 
   std::array<int,SRBD_NBX0> idxbx_b;
 
-  //Resetting algorithm
-  Eigen::Matrix<double,5,1> q_interrupt;
-  Eigen::Matrix<double,5,5> W_interrupt;
-  double Th_intterupt = 0;
+  #pragma endregion
+
+  // ===== RESETTING PARAMETERS ========
+  #pragma region
+  Eigen::Matrix<double,5,1> q_interrupt;            //Variable holding the current setpoint
+  Eigen::Matrix<double,5,5> W_interrupt;            //Variable holding the error weight
+  double Th_intterupt = 0;                          //Variable holding the resetting threshold
+
+  //Note -> a solution could be to use ptrs to not copy the data in W,q. But W,Q are in arrays, and should be always converted. 
+  //Thus this more clean solution is chose,
 
   int current_mode  = controller_mode::stabilizing; //enum {r: 0, p: 1, y: 2, stabilization: 3} 
-  int current_phase = phase::mid; //enum. Always starts from mid
+  int current_phase = phase::mid;                   //enum. Always starts from mid
+
+  bool cancel_roll = true;                          //TODO: maybe do not use
+  bool pitch_mode  = true;
 
   ros::Publisher phase_publisher;
   mpc_controller::phase phase_msg;
+  #pragma endregion
 
-  // LEG PLANNER
-  std::array<const Eigen::Matrix<double,5,5> *,4> W_ptr;
-  std::array<const double *,4> thr_ptr;
+  // ===== LEG PLANNER PARAMETERS ========
+  #pragma region
 
-  Eigen::Matrix< double,10,1> q_leg;
-  int trajectory_indexer = 0;
-  std::array<double,NX*(FR_LEG_POS_N+1)> xtraj_l;
-  std::array<double,NU* FR_LEG_POS_N   > utraj_l;
   ros::Timer leg_planner_timer;
+  int N_l = FR_LEG_TORQUE_N; //Number of shooting intervals for torque planner
+
+  // ---trajectory---:
+  std::array<double, FR_LEG_TORQUE_NX * (FR_LEG_TORQUE_N+1)> xtraj_l;
+  std::array<double, FR_LEG_TORQUE_NU * (FR_LEG_TORQUE_N  )> utraj_l;
+
+  // Leg Planner Weights variables:
+  Eigen::Matrix<double,17,1> W;
+  Eigen::Matrix<double,10,1> Q;
+
+  Eigen::Matrix<double,10,1> Wstate;
+  Eigen::Matrix<double,3,1>  Wtrack;
+  Eigen::Matrix<double,2,1>  Wu;
+  Eigen::Matrix<double,2,1>  Wclosure; 
+
+  // Flatten diagonal arrays:
+  std::array<double,17*17> Wflatt;   //Class Variable -> so i do not fill with 0 all the time
+  std::array<double,10*10> Wflatt_e; //Class Variable
+
+  // Leg Planner Weights variables:
+  Eigen::Vector3d tref_mh      ; 
+  Eigen::Vector2d closure_ref  ;
+  Eigen::Vector2d input_ref    ;
+  Eigen::Matrix<double,17,1> y_ref ;
+  
+  // --- solver ---:
+  fr_leg_torque_solver_capsule *acados_ocp_capsule_leg;
+  ocp_nlp_config *nlp_config_leg ;
+  ocp_nlp_dims *nlp_dims_leg ;
+  ocp_nlp_in *nlp_in_leg ;
+  ocp_nlp_out *nlp_out_leg ;
+  ocp_nlp_solver *nlp_solver_leg ;
+  void *nlp_opts_leg ;
+
+  std::array<int,FR_LEG_TORQUE_NBX0> idxbx_l;
 
 
+  #pragma endregion
+  
 };
 
 int main(int argc, char **argv) {
@@ -741,7 +811,8 @@ Eigen::Vector3d qd(0,1.8000,-0.7000);
 // auto timer  = nh.createTimer(ros::Duration(5),
 // [&wbc, qd](const ros::TimerEvent&) { wbc.mpc_update_ocp(qd); },true,true);
 
-auto timer  = nh.createTimer(ros::Duration(5),&whole_body_controller::body_planner_update,&wbc ,true);
+auto timer  = nh.createTimer(ros::Duration(2),&whole_body_controller::body_planner_update,&wbc ,true);
+auto timer2  = nh.createTimer(ros::Duration(1),&whole_body_controller::leg_planner_update,&wbc ,true);
 
 while(ros::ok()){
   wbc.check_phase();
