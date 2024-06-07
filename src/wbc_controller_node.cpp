@@ -426,6 +426,7 @@ class whole_body_controller {
 
   // ===== LEG PLANNER METHODS ========
   private:
+  /// @brief This function creates the data types + all hyperparameters
   void leg_planner_solver_init(){
     acados_ocp_capsule_leg = fr_leg_torque_acados_create_capsule();
     // there is an opportunity to change the number of shooting intervals in C without new code generation
@@ -462,21 +463,14 @@ class whole_body_controller {
     Q.head(5) << 0.01* Eigen::Matrix<double,5,1>::Ones();
     Q.tail(5) << 0.02* Eigen::Matrix<double,5,1>::Ones();
 
-    W.segment(0,3)  = Wtrack;
-    W.segment(3,2)  = Wu;
-    W.segment(5,2)  = Wclosure;
-    W.segment(7,10) = Wstate; 
-
     // Reference:
     tref_mh     << 0,0,0;
     closure_ref << 0,0;
     input_ref   << 0,0;
+    qref        = q_interrupt; 
+    y_ref.tail(5).setZero();    
 
-    y_ref.segment(0,3) = tref_mh; //This updates
-    y_ref.segment(3,2) = input_ref;
-    y_ref.segment(5,2) = closure_ref;
-    y_ref.segment(7,5) = q_interrupt;
-    y_ref.tail(5).setZero();
+    leg_plannet_update_weightsANDreference(); //Pass the default values in the solver structure
 
     //Initialize result:
     xtraj_l.fill(0);
@@ -484,12 +478,18 @@ class whole_body_controller {
 
   }
 
+  /// @brief This function updates the initial condition constraint. Should be called before each mpc evaluation
+  /// @param x0 Initial condition.
   void leg_planner_update_constraints(double *x0){
     ocp_nlp_constraints_model_set(nlp_config_leg, nlp_dims_leg, nlp_in_leg, 0, "idxbx", idxbx_l.data());
     ocp_nlp_constraints_model_set(nlp_config_leg, nlp_dims_leg, nlp_in_leg, 0, "lbx", x0);
     ocp_nlp_constraints_model_set(nlp_config_leg, nlp_dims_leg, nlp_in_leg, 0, "ubx", x0);
   }
 
+
+  /// @brief This function updates the Weights and references in the mpc solver structure.
+  /// Should be called only when changing phase ad at initialization
+  /// TODO: remove y_ref overwrite
   void leg_plannet_update_weightsANDreference(){
     //1. Populate FlattenWeights with new values:
     for (int i=0;i<17 ; i++){
@@ -519,6 +519,8 @@ class whole_body_controller {
 
   }
 
+
+  /// @brief This function initializes the mpc solver
   void leg_planner_initialize_solution(Eigen::Matrix<double,FR_LEG_TORQUE_NBX,1> & x0){
     Eigen::Vector3d u0;
     u0.setZero();
@@ -532,6 +534,11 @@ class whole_body_controller {
   }
 
   public:
+  /// @brief This function is called by the `leg_planner_timer` and: 
+  /// 1. Reads the current state 
+  /// 2. Evaluates the mpc
+  /// @param  
+  /// TODO: remove x0 - overwrite
   void leg_planner_update(const ros::TimerEvent&){
 
     Eigen::Matrix<double,10,1> x0 ;
@@ -541,7 +548,6 @@ class whole_body_controller {
     
     leg_planner_update_constraints(x0.data());
     leg_planner_initialize_solution(x0);
-    leg_plannet_update_weightsANDreference();
 
     //update config
     ocp_nlp_solver_opts_set(nlp_config_leg, nlp_opts_leg, "rti_phase", &leg_planner_counter);
@@ -759,24 +765,30 @@ class whole_body_controller {
   std::array<double, FR_LEG_TORQUE_NX * (FR_LEG_TORQUE_N+1)> xtraj_l;
   std::array<double, FR_LEG_TORQUE_NU * (FR_LEG_TORQUE_N  )> utraj_l;
 
-  // Leg Planner Weights variables:
-  Eigen::Matrix<double,17,1> W;
-  Eigen::Matrix<double,10,1> Q;
+  #define FR_LEG_TORQUE_NYREF 17
+  #define FR_LEG_TORQUE_NYREF_E 10
 
-  Eigen::Matrix<double,10,1> Wstate;
-  Eigen::Matrix<double,3,1>  Wtrack;
-  Eigen::Matrix<double,2,1>  Wu;
-  Eigen::Matrix<double,2,1>  Wclosure; 
+  // Leg Planner Weights variables:
+  Eigen::Matrix<double,FR_LEG_TORQUE_NYREF  ,1> W;
+  Eigen::Matrix<double,FR_LEG_TORQUE_NYREF_E,1> Q;
+
+  //Aliases for Weight parts
+  Eigen::Block< Eigen::Matrix<double,FR_LEG_TORQUE_NYREF,1>,3,1>  Wtrack   = W.segment<3>(0); 
+  Eigen::Block< Eigen::Matrix<double,FR_LEG_TORQUE_NYREF,1>,2,1>  Wu       = W.segment<2>(3); 
+  Eigen::Block< Eigen::Matrix<double,FR_LEG_TORQUE_NYREF,1>,2,1>  Wclosure = W.segment<2>(5); 
+  Eigen::Block< Eigen::Matrix<double,FR_LEG_TORQUE_NYREF,1>,10,1> Wstate   = W.segment<10>(7); 
 
   // Flatten diagonal arrays:
   std::array<double,17*17> Wflatt;   //Class Variable -> so i do not fill with 0 all the time
   std::array<double,10*10> Wflatt_e; //Class Variable
 
   // Leg Planner Weights variables:
-  Eigen::Vector3d tref_mh      ; 
-  Eigen::Vector2d closure_ref  ;
-  Eigen::Vector2d input_ref    ;
-  Eigen::Matrix<double,17,1> y_ref ;
+  Eigen::Matrix<double,FR_LEG_TORQUE_NYREF,1> y_ref ;
+
+  Eigen::Block< Eigen::Matrix<double,FR_LEG_TORQUE_NYREF,1>,3,1>  tref_mh     = y_ref.segment<3>(0); 
+  Eigen::Block< Eigen::Matrix<double,FR_LEG_TORQUE_NYREF,1>,2,1>  input_ref   = y_ref.segment<2>(3); 
+  Eigen::Block< Eigen::Matrix<double,FR_LEG_TORQUE_NYREF,1>,2,1>  closure_ref = y_ref.segment<2>(5); 
+  Eigen::Block< Eigen::Matrix<double,FR_LEG_TORQUE_NYREF,1>,5,1> qref         = y_ref.segment<5>(7); 
   
   // --- solver ---:
   fr_leg_torque_solver_capsule *acados_ocp_capsule_leg;
