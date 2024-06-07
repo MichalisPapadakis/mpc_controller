@@ -7,6 +7,7 @@
 #include "sensor_msgs/JointState.h"
 #include "nav_msgs/Odometry.h"
 #include "std_msgs/Float32MultiArray.h"
+#include "mpc_controller/phase.h"
 
 #define corresponding_kinematic_configuration(leg_id) ( (i==0 || i==3)? 1: 2 ) 
 #define traj_stages 4
@@ -225,6 +226,18 @@ class whole_body_controller {
       // leg_planner_timer  = nh.createTimer(5,&whole_body_controller::leg_planner_update,this);
 
       //reset
+      phase_publisher = nh.advertise<mpc_controller::phase>("controller_current_phase",10);
+
+      //TODO: remove them after logic for mode:
+      resetting::populate_diagonal(W_interrupt,*( resetting::yaw_W          [current_phase] ) );
+      resetting::populate_vector  (q_interrupt,*( resetting::yaw_setpoints  [current_phase] ) );
+      Th_intterupt = resetting::yaw_thresholds [current_phase ];
+
+      double conv = 180./M_PI;
+      ROS_INFO("[wbc controller]: Current setpoint is: [%.1f,%.1f,%.1f]",q_interrupt[0]*conv,q_interrupt[1]*conv,q_interrupt[3]*conv);
+      ROS_INFO("[wbc controller]: Current phase is : %d",current_phase);
+      ROS_INFO("[wbc controller]: Current threshold  is : %.1f",Th_intterupt);
+
 
       //3. trajectory timer
       trajectory_timer = nh.createTimer(5,&whole_body_controller::trajectory_publish,this);
@@ -540,7 +553,6 @@ class whole_body_controller {
     //2. calculate error:
     Eigen::Matrix<double,5,1> q_error = q_fr - q_interrupt;  
     double error_norm = q_error.transpose() * W_interrupt * q_error ; 
-    ROS_INFO("[wbc controller] Error norm is: %f",error_norm);
 
     //3. Check if resetting
     if (error_norm < Th_intterupt){
@@ -556,8 +568,19 @@ class whole_body_controller {
       populate_diagonal(W_interrupt,*( yaw_W          [current_phase] ) );
       populate_vector  (q_interrupt,*( yaw_setpoints  [current_phase] ) );
       Th_intterupt = yaw_thresholds [current_phase ];
+      
+      double conv = 180./M_PI;
+      ROS_INFO("[wbc controller]: Current setpoint is: [%.1f,%.1f,%.1f]",q_interrupt[0]*conv,q_interrupt[1]*conv,q_interrupt[3]*conv);
+      ROS_INFO("[wbc controller]: Current phase is : %d",current_phase);
+      ROS_INFO("[wbc controller]: Current threshold  is : %.1f",Th_intterupt);
     }
 
+    phase_msg.error = error_norm;
+    phase_msg.phase = static_cast<u_int8_t>( current_phase ) ;
+    phase_msg.header.stamp  =ros::Time::now();
+    phase_publisher.publish(phase_msg);
+
+    
 
 
   }
@@ -680,10 +703,13 @@ class whole_body_controller {
   //Resetting algorithm
   Eigen::Matrix<double,5,1> q_interrupt;
   Eigen::Matrix<double,5,5> W_interrupt;
-  double Th_intterupt;
+  double Th_intterupt = 0;
 
   int current_mode  = controller_mode::stabilizing; //enum {r: 0, p: 1, y: 2, stabilization: 3} 
   int current_phase = phase::mid; //enum. Always starts from mid
+
+  ros::Publisher phase_publisher;
+  mpc_controller::phase phase_msg;
 
   // LEG PLANNER
   std::array<const Eigen::Matrix<double,5,5> *,4> W_ptr;
@@ -718,6 +744,7 @@ Eigen::Vector3d qd(0,1.8000,-0.7000);
 auto timer  = nh.createTimer(ros::Duration(5),&whole_body_controller::body_planner_update,&wbc ,true);
 
 while(ros::ok()){
+  wbc.check_phase();
   ros::spinOnce(); // Process any callbacks
   loop_rate.sleep();
 }

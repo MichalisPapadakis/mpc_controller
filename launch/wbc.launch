@@ -2,4 +2,8 @@
   <node pkg="mpc_controller" type="wbc_controller_node" name="mpc_controller" output="screen">
     <param name="" textfile="$(find mpc_controller)/config/controller_params.yaml" type="yaml"/>
   </node>
+
+  <node pkg="rqt_plot" type="rqt_plot" name="rqt_plot" output="screen">
+  </node>
+
 </launch>

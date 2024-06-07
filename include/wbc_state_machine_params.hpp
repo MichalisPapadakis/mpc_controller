@@ -47,9 +47,9 @@ constexpr std::array<double, 5> roll_W_tor {     1,     0,        0,        0,  
 #define roll_Th_ext 0.1
 #define roll_Th_tor 0.25
 
-constexpr std::array<const std::array<double, 5> * , 4> roll_setpoints  {  &roll_pos,   &roll_neg,   &roll_ext,   &roll_mid } ;
+constexpr std::array<const std::array<double, 5> * , 4> roll_setpoints  {  &roll_mid,   &roll_neg,   &roll_ext,   &roll_pos } ;
 constexpr std::array<const std::array<double, 5> * , 4> roll_W          {&roll_W_mid, &roll_W_res, &roll_W_ext, &roll_W_tor } ;
-
+constexpr std::array<double  , 4>                       roll_thresholds {roll_Th_mid, roll_Th_res, roll_Th_ext, roll_Th_tor } ;
 
 // PITCH:
 constexpr std::array<double, 5> pitch_pos   {      0,  2.0900,  -1.5456,  -0.3330,   1.0078 };
@@ -69,7 +69,7 @@ constexpr std::array<double, 5> pitch_W_tor {     0,   0.4,        0,        2, 
 #define pitch_inject_1_3 -2 //Inject this in the matrix in the pitch mode for ext-tor phases
 
 
-constexpr std::array<const std::array<double, 5> * , 4> pitch_setpoints  {  &pitch_pos,   &pitch_neg,   &pitch_ext,   &pitch_mid } ;
+constexpr std::array<const std::array<double, 5> * , 4> pitch_setpoints  {  &pitch_mid,   &pitch_neg,   &pitch_ext,   &pitch_pos } ;
 constexpr std::array<const std::array<double, 5> * , 4> pitch_W          {&pitch_W_mid, &pitch_W_res, &pitch_W_ext, &pitch_W_tor } ;
 constexpr std::array<double  , 4>                       pitch_thresholds {pitch_Th_mid, pitch_Th_res, pitch_Th_ext, pitch_Th_tor } ;
 
@@ -77,8 +77,8 @@ constexpr std::array<double  , 4>                       pitch_thresholds {pitch_
 //YAW: 
 constexpr std::array<double,5> yaw_pos {1.4500,   -1.1000,    0.0816,    1.8500,    1.0829 } ;
 constexpr std::array<double,5> yaw_neg {1.4700,    1.0400,   -0.7702,   -0.6000,   -0.1164 } ;
-constexpr std::array<double,5> yaw_ext {     0,    0.6800,   -1.2675,    1.0000,    1.3578 } ;
-constexpr std::array<double,5> yaw_mid { 1.300,    0.1500,   -0.4166,    0.4700 ,   0.5689 } ;
+constexpr std::array<double,5> yaw_mid {     0,    0.6800,   -1.2675,    1.0000,    1.3578 } ;
+constexpr std::array<double,5> yaw_ext { 1.300,    0.1500,   -0.4166,    0.4700 ,   0.5689 } ;
 
 
 constexpr std::array<double,5> yaw_W_mid {   1,1,0,1,0 } ;
@@ -91,7 +91,7 @@ constexpr std::array<double,5> yaw_W_tor { 0.4,1,0,1,0 } ;
 #define yaw_Th_ext 0.15
 #define yaw_Th_tor 0.5
 
-constexpr std::array<const std::array<double, 5> * , 4> yaw_setpoints  {  &yaw_pos,   &yaw_neg,   &yaw_ext,   &yaw_mid } ;
+constexpr std::array<const std::array<double, 5> * , 4> yaw_setpoints  {  &yaw_mid,   &yaw_neg,   &yaw_ext,   &yaw_pos } ;
 constexpr std::array<const std::array<double, 5> * , 4> yaw_W          {&yaw_W_mid, &yaw_W_res, &yaw_W_ext, &yaw_W_tor } ;
 constexpr std::array<double  , 4>                       yaw_thresholds {yaw_Th_mid, yaw_Th_res, yaw_Th_ext, yaw_Th_tor } ;
 

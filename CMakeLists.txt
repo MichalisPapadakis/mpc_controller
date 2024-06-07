@@ -12,6 +12,8 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   sensor_msgs
   cubemars_controller_ros_msgs
+  std_msgs 
+  message_generation
 )
 add_subdirectory(include/c_generated_code) #position control
 add_subdirectory(include/c_generated_code_SRBD) #SRBD MPC
@@ -51,11 +53,10 @@ add_subdirectory(include/c_generated_code_SRBD) #SRBD MPC
 ##   * add every package in MSG_DEP_SET to generate_messages(DEPENDENCIES ...)
 
 ## Generate messages in the 'msg' folder
-# add_message_files(
-#   FILES
-#   Message1.msg
-#   Message2.msg
-# )
+add_message_files(
+  FILES
+  phase.msg
+)
 
 ## Generate services in the 'srv' folder
 # add_service_files(
@@ -72,10 +73,10 @@ add_subdirectory(include/c_generated_code_SRBD) #SRBD MPC
 # )
 
 ## Generate added messages and services with any dependencies listed here
-# generate_messages(
-#   DEPENDENCIES
-#   std_msgs  # Or other packages containing msgs
-# )
+generate_messages(
+  DEPENDENCIES
+  std_msgs  # Or other packages containing msgs
+)
 
 ################################################
 ## Declare ROS dynamic reconfigure parameters ##
@@ -110,6 +111,7 @@ catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES mpc_controller
 #  CATKIN_DEPENDS olympus_observer roscpp
+  CATKIN_DEPENDS message_runtime
 #  DEPENDS system_lib
 )
 
