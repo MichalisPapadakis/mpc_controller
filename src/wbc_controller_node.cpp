@@ -435,9 +435,9 @@ class whole_body_controller {
     }
 
     if (BODY_PLANNER_TORQUE_TARGET){
-      double CV = -0.5; //for yaw
-
-      tref_mh << CV*utraj_b[0],CV*utraj_b[1],CV*utraj_b[2];
+      double CV = -1; //for yaw
+      
+      tref_mh << CV*utraj_b[0],CV*utraj_b[1],CV* MIN(utraj_b[2],1.5);
       ROS_INFO("tref_body = [%.1f,%.1f,%.1f]",utraj_b[0],utraj_b[1],utraj_b[2]);
       ROS_INFO("tref_mpc = [%.1f,%.1f,%.1f]",tref_mh[0],tref_mh[1],tref_mh[2]);
     }
