@@ -33,6 +33,11 @@
 #define PRINT_BODY_PLANNER_MPC_RESULTS false
 #define DEBUG_TRAJECTORY_PUBLISHING false
 
+#define TORQUE_TARGET_X 0
+#define TORQUE_TARGET_Y 0
+#define TORQUE_TARGET_Z 1
+#define BODY_PLANNER_TORQUE_TARGET true
+
 //This are read from a config in WBC class
 struct leg_controller_opt{
   std::array<int,5> joint_state_id{0,1,2,3,4};
@@ -238,7 +243,7 @@ class whole_body_controller {
       ROS_INFO("[wbc controller]: Current threshold  is : %.1f",Th_intterupt);
 
       //4.  Controller Timers:
-      // body_planner_timer = nh.createTimer(5,&whole_body_controller::body_planner_update,this); 
+      body_planner_timer = nh.createTimer(ros::Duration(TH_B),&whole_body_controller::body_planner_update,this); 
       leg_planner_timer  = nh.createTimer(ros::Duration(TH_L),&whole_body_controller::leg_planner_update,this);
       //  trajectory timer
       trajectory_timer = nh.createTimer(ros::Duration(TH_L/FR_LEG_TORQUE_N),&whole_body_controller::trajectory_publish,this);
@@ -422,11 +427,21 @@ class whole_body_controller {
     body_planner_mpc_status.solution_time = elapsed_time;
 
     //TODO: remove this
+    if (PRINT_BODY_PLANNER_MPC_RESULTS){
+      printf("\n--- xtraj ---\n");
+      d_print_exp_tran_mat( SRBD_NX, N_b+1, xtraj_b.data(), SRBD_NX);
+      printf("\n--- utraj ---\n");
+      d_print_exp_tran_mat( SRBD_NU, N_b, utraj_b.data(), SRBD_NU );
+    }
 
-    printf("\n--- xtraj ---\n");
-    d_print_exp_tran_mat( SRBD_NX, N_b+1, xtraj_b.data(), SRBD_NX);
-    printf("\n--- utraj ---\n");
-    d_print_exp_tran_mat( SRBD_NU, N_b, utraj_b.data(), SRBD_NU );
+    if (BODY_PLANNER_TORQUE_TARGET){
+      double CV = -0.5; //for yaw
+
+      tref_mh << CV*utraj_b[0],CV*utraj_b[1],CV*utraj_b[2];
+      ROS_INFO("tref_body = [%.1f,%.1f,%.1f]",utraj_b[0],utraj_b[1],utraj_b[2]);
+      ROS_INFO("tref_mpc = [%.1f,%.1f,%.1f]",tref_mh[0],tref_mh[1],tref_mh[2]);
+    }
+
 
 
   }
@@ -465,7 +480,7 @@ class whole_body_controller {
     y_ref.setZero();
 
     //TODO: from parameter or something:
-    tref_mh     << 0,0,1;
+    tref_mh     << TORQUE_TARGET_X,TORQUE_TARGET_Y,TORQUE_TARGET_Z;
 
     update_reset_algorithm_quantities();
 
