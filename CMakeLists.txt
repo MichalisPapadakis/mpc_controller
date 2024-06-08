@@ -57,6 +57,7 @@ add_subdirectory(include/c_generated_code_leg) #torque tracking MPC
 add_message_files(
   FILES
   phase.msg
+  mpc_status.msg
 )
 
 ## Generate services in the 'srv' folder

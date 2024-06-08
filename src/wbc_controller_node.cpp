@@ -8,6 +8,7 @@
 #include "nav_msgs/Odometry.h"
 #include "std_msgs/Float32MultiArray.h"
 #include "mpc_controller/phase.h"
+#include "mpc_controller/mpc_status.h"
 
 #define corresponding_kinematic_configuration(leg_id) ( (i==0 || i==3)? 1: 2 ) 
 #define traj_stages 4
@@ -222,6 +223,8 @@ class whole_body_controller {
 
       //3.  Reseting init
       phase_publisher = nh.advertise<mpc_controller::phase>("controller_current_phase",10);
+      leg_planner_status_pub  = nh.advertise<mpc_controller::mpc_status>("leg_mpc_status",10);
+      body_planner_status_pub = nh.advertise<mpc_controller::mpc_status>("body_mpc_status",10);
 
       //TODO: remove them after logic for mode:
       W_interrupt.setZero();
@@ -414,7 +417,9 @@ class whole_body_controller {
     for (int ii = 0; ii < nlp_dims_SRBD->N; ii++)
         ocp_nlp_out_get(nlp_config_SRBD, nlp_dims_SRBD, nlp_out_SRBD, ii, "u", &utraj_b[ii*SRBD_NU]);
 
-    ROS_INFO("[mpc_controller]: Body Planner MPC exited with status:  %d. Elapsed time: %.1f [ms]",status,1e3*elapsed_time);
+    body_planner_mpc_status.header.stamp = ros::Time::now();
+    body_planner_mpc_status.status = status;
+    body_planner_mpc_status.solution_time = elapsed_time;
 
     //TODO: remove this
 
@@ -558,7 +563,11 @@ class whole_body_controller {
     for (int ii = 0; ii < nlp_dims_leg->N; ii++)
         ocp_nlp_out_get(nlp_config_leg, nlp_dims_leg, nlp_out_leg, ii, "u", &utraj_l[ii*FR_LEG_TORQUE_NU]);
 
-    ROS_INFO("[mpc_controller]: Leg planner MPC exited with status:  %d. Elapsed time: %.1f [ms]",status,1e3*elapsed_time);
+    leg_planner_mpc_status.header.stamp = ros::Time::now();
+    leg_planner_mpc_status.status = static_cast<uint8_t>(status);
+    leg_planner_mpc_status.solution_time = 1e3*elapsed_time;
+    leg_planner_status_pub.publish(leg_planner_mpc_status);
+
     trajectory_indexer = 0;
     trajectory_timer.stop();
     trajectory_publish_();
@@ -748,6 +757,8 @@ class whole_body_controller {
   // ===== BODY PLANNER PARAMETERS ========
   #pragma region
   // --- ros specific ---:
+  ros::Publisher body_planner_status_pub;
+  mpc_controller::mpc_status body_planner_mpc_status;
   ros::Timer body_planner_timer;
   ros::Subscriber olympus_current_pose_sub;
   ros::Subscriber olympus_desired_pose_sub;
@@ -799,7 +810,8 @@ class whole_body_controller {
 
   // ===== LEG PLANNER PARAMETERS ========
   #pragma region
-
+  ros::Publisher leg_planner_status_pub;
+  mpc_controller::mpc_status leg_planner_mpc_status;
   ros::Timer leg_planner_timer;
   int N_l = FR_LEG_TORQUE_N; //Number of shooting intervals for torque planner
 
