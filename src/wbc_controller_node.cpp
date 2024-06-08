@@ -28,6 +28,9 @@
 #include "wbc_state_machine_params.hpp"
 #define TH_L 0.1
 #define TH_B 0.1
+#define PRINT_LEG_PLANNER_MPC_RESULTS false
+#define PRINT_BODY_PLANNER_MPC_RESULTS false
+#define DEBUG_TRAJECTORY_PUBLISHING false
 
 //This are read from a config in WBC class
 struct leg_controller_opt{
@@ -425,7 +428,7 @@ class whole_body_controller {
 
   // ===== LEG PLANNER METHODS ========
   private:
-  /// @brief This function creates the data types + all hyperparameters
+  /// @brief This function creates the solver data types 
   void leg_planner_solver_init(){
     acados_ocp_capsule_leg = fr_leg_torque_acados_create_capsule();
     // there is an opportunity to change the number of shooting intervals in C without new code generation
@@ -449,27 +452,17 @@ class whole_body_controller {
 
     for (int i=0; i < FR_LEG_TORQUE_NBX0 ; i++) { idxbx_l[i] = i;}
 
-    //Give default values:
+    //Give default values to hyper-parameters:
     Wflatt.fill(0); 
     Wflatt_e.fill(0);
+    W.setZero();
+    Q.setZero();
+    y_ref.setZero();
 
-    Wclosure.setZero() ;
-    Wtrack << 5,5,160;
-    Wu     << 5,5;
-    Wstate.head(5) << 0.01* Eigen::Matrix<double,5,1>::Ones();
-    Wstate.tail(5) << 2   * Eigen::Matrix<double,5,1>::Ones();
-    
-    Q.head(5) << 0.01* Eigen::Matrix<double,5,1>::Ones();
-    Q.tail(5) << 0.02* Eigen::Matrix<double,5,1>::Ones();
-
-    // Reference:
+    //TODO: from parameter or something:
     tref_mh     << 0,0,1;
-    closure_ref << 0,0;
-    input_ref   << 0,0;
-    qref        = q_interrupt; 
-    y_ref.tail(5).setZero();    
 
-    leg_plannet_update_weightsANDreference(); //Pass the default values in the solver structure
+    update_reset_algorithm_quantities();
 
     //Initialize result:
     xtraj_l.fill(0);
@@ -487,7 +480,7 @@ class whole_body_controller {
 
 
   /// @brief This function updates the Weights and references in the mpc solver structure.
-  /// Should be called only when changing phase ad at initialization
+  /// Should be called only when changing phase
   /// TODO: remove y_ref overwrite
   void leg_plannet_update_weightsANDreference(){
     //1. Populate FlattenWeights with new values:
@@ -571,17 +564,12 @@ class whole_body_controller {
     trajectory_publish_();
     trajectory_timer.start();
 
-    printf("\n--- xtraj ---\n");
-    d_print_exp_tran_mat( FR_LEG_TORQUE_NX, N_l+1, xtraj_l.data(), FR_LEG_TORQUE_NX);
-    printf("\n--- utraj ---\n");
-    d_print_exp_tran_mat( FR_LEG_TORQUE_NU, N_l, utraj_l.data(), FR_LEG_TORQUE_NU );
-
-    // ROS_INFO_STREAM("qint" << q_interrupt);
-    // ROS_INFO_STREAM("yref" << y_ref);
-    // ROS_INFO_STREAM("x0"   << x0);
-    // ROS_INFO_STREAM("W"   << W);
-    // ROS_INFO_STREAM("Q"   << Q);
-
+    if (PRINT_LEG_PLANNER_MPC_RESULTS){
+      printf("\n--- xtraj ---\n");
+      d_print_exp_tran_mat( FR_LEG_TORQUE_NX, N_l+1, xtraj_l.data(), FR_LEG_TORQUE_NX);
+      printf("\n--- utraj ---\n");
+      d_print_exp_tran_mat( FR_LEG_TORQUE_NU, N_l, utraj_l.data(), FR_LEG_TORQUE_NU );
+    }
 
   }
 
@@ -648,6 +636,27 @@ class whole_body_controller {
       // MPC WEIGHTS SELF QUANTITIES:
       //TODO: change cost function weights
       qref = q_interrupt; 
+
+      const std::array< double,12> * weights_ptr =  yaw_weights [current_phase] ;
+
+      Wtrack[0] =   weights_ptr->at(0);
+      Wtrack[1] =   weights_ptr->at(1);
+      Wtrack[2] =   weights_ptr->at(2);
+
+      Wu.fill( weights_ptr->at(3) ) ;
+
+      Wstate[0] =   weights_ptr->at(4);
+      Wstate.segment<4>(1).fill(    weights_ptr->at(5) );
+      Wstate[5] =    weights_ptr->at(6) ;
+      Wstate.segment<4>(6).fill(    weights_ptr->at(7) );
+
+      Q[0] =   weights_ptr->at(8);
+      Q.segment<4>(1).fill(    weights_ptr->at(9) );
+      Q[5] =    weights_ptr->at(10) ;
+      Q.segment<4>(6).fill(    weights_ptr->at(11) );
+
+      leg_plannet_update_weightsANDreference();
+
   }
 
 
@@ -692,12 +701,10 @@ class whole_body_controller {
   }
 
   void trajectory_publish(const ros::TimerEvent&){
-    ROS_INFO("publishing trajectory from timer");
     trajectory_publish_();
   }
 
   void trajectory_publish_(){
-    ROS_INFO("publishing trajectory");
     int & i = trajectory_indexer ;
     i++;
 
@@ -708,7 +715,17 @@ class whole_body_controller {
 
     Eigen::Vector3f pos(qMH,qHI,qHO);
     allocation(pos*180/M_PI);
-    
+
+    if (DEBUG_TRAJECTORY_PUBLISHING){
+      ROS_DEBUG_STREAM("Position is:" << pos*180/M_PI);
+      ROS_DEBUG_STREAM("Qrref is:" << qref[0]*180/M_PI<<","<< qref[1]*180/M_PI<<","<< qref[3]*180/M_PI<<".");
+      ROS_DEBUG_STREAM("Qinterupt is:" << q_interrupt[0]*180/M_PI<<","<< q_interrupt[1]*180/M_PI<<","<< q_interrupt[3]*180/M_PI<<".");
+      ROS_DEBUG_STREAM("Q is"<<Q);
+      ROS_DEBUG_STREAM("Wstate is"<<Wstate);
+      ROS_DEBUG_STREAM("Wu is"<<Wu);
+      ROS_DEBUG_STREAM("Wtrack is"<<Wtrack);
+    }
+
     if (i == FR_LEG_TORQUE_N+1){
       ROS_INFO_STREAM("reaching end of traj");
       i=0;

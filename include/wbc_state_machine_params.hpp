@@ -29,9 +29,34 @@ void populate_vector(Eigen::Matrix<double,5,1> & vec, const std::array<double,5>
   vec << arr[0],arr[1],arr[2],arr[3],arr[4];
 }
 
-// ===== SETPOINTS ======== 
+constexpr std::array<double, 12> populateCollectiveWeightMatrices( 
+  const double (&Wtrack)[3], 
+  const double & Wu, 
+  const double (&Wstate)[4], 
+  const double (&Q)[4]){
 
-// ROLL:
+    // double arr[12];  
+    std::array<double,12> arr = {
+      Wtrack[0],
+      Wtrack[1],
+      Wtrack[2],
+      Wu,
+      Wstate[0],
+      Wstate[1],
+      Wstate[2],
+      Wstate[3],
+      Q[0],
+      Q[1],
+      Q[2],
+      Q[3],
+    };
+
+    return arr;
+  }
+
+// ===== ROLL: ======== 
+#pragma region 
+
 constexpr std::array<double, 5> roll_pos   {  1.85,        0,        0,        0,        0 };
 constexpr std::array<double, 5> roll_neg   {  -1.2,   0.3500,  -0.5542,   0.3500,   0.5605 };
 constexpr std::array<double, 5> roll_ext   {     0,        0,        0,        0,        0 };
@@ -51,7 +76,11 @@ constexpr std::array<const std::array<double, 5> * , 4> roll_setpoints  {  &roll
 constexpr std::array<const std::array<double, 5> * , 4> roll_W          {&roll_W_mid, &roll_W_res, &roll_W_ext, &roll_W_tor } ;
 constexpr std::array<double  , 4>                       roll_thresholds {roll_Th_mid, roll_Th_res, roll_Th_ext, roll_Th_tor } ;
 
-// PITCH:
+#pragma endregion
+
+// ===== PITCH: ======== 
+#pragma region 
+
 constexpr std::array<double, 5> pitch_pos   {      0,  2.0900,  -1.5456,  -0.3330,   1.0078 };
 constexpr std::array<double, 5> pitch_neg   {      0, -1.0000,  -1.3412,   3.5000,   1.8464 };
 constexpr std::array<double, 5> pitch_ext   {      0,       0,        0,        0,        0 };
@@ -73,8 +102,11 @@ constexpr std::array<const std::array<double, 5> * , 4> pitch_setpoints  {  &pit
 constexpr std::array<const std::array<double, 5> * , 4> pitch_W          {&pitch_W_mid, &pitch_W_res, &pitch_W_ext, &pitch_W_tor } ;
 constexpr std::array<double  , 4>                       pitch_thresholds {pitch_Th_mid, pitch_Th_res, pitch_Th_ext, pitch_Th_tor } ;
 
+#pragma endregion
 
-//YAW: 
+// ===== YAW: ======== 
+#pragma region 
+
 constexpr std::array<double,5> yaw_pos {1.4500,   -1.1000,    0.0816,    1.8500,    1.0829 } ;
 constexpr std::array<double,5> yaw_neg {1.4700,    1.0400,   -0.7702,   -0.6000,   -0.1164 } ;
 constexpr std::array<double,5> yaw_mid {     0,    0.6800,   -1.2675,    1.0000,    1.3578 } ;
@@ -94,6 +126,44 @@ constexpr std::array<double,5> yaw_W_tor { 0.4,1,0,1,0 } ;
 constexpr std::array<const std::array<double, 5> * , 4> yaw_setpoints  {  &yaw_mid,   &yaw_neg,   &yaw_ext,   &yaw_pos } ;
 constexpr std::array<const std::array<double, 5> * , 4> yaw_W          {&yaw_W_mid, &yaw_W_res, &yaw_W_ext, &yaw_W_tor } ;
 constexpr std::array<double  , 4>                       yaw_thresholds {yaw_Th_mid, yaw_Th_res, yaw_Th_ext, yaw_Th_tor } ;
+
+// mid weights:
+constexpr double yaw_Wtrack_mid[3] = {1,0,1};
+constexpr double yaw_Wu_mid        = 2;
+constexpr double yaw_Wstate_mid[4] = {100,10,1e-2,1e-2};     //W(1),W(2:5),W(6),W(7:10)
+constexpr double yaw_Q_mid[4]      = {500,20,5e-3,5e-3}; //Q(1),Q(2:5),Q(6),Q(7:10)
+
+// res weights:
+constexpr double yaw_Wtrack_res[3] = {1,0,0};
+constexpr double yaw_Wu_res        = 1;
+constexpr double yaw_Wstate_res[4] = {50,1,1e-2,1e-2};     //W(1),W(2:5),W(6),W(7:10)
+constexpr double yaw_Q_res[4]      = {100,10,5e-3,5e-3}; //Q(1),Q(2:5),Q(6),Q(7:10)
+
+// ext weights:
+constexpr double yaw_Wtrack_ext[3] = {1,0,5};
+constexpr double yaw_Wu_ext        = 5e-1;
+constexpr double yaw_Wstate_ext[4] = {1e-2,1e-2,2,2};     //W(1),W(2:5),W(6),W(7:10) //TODO: fil this
+constexpr double yaw_Q_ext[4]      = {100,100,200,1}; //Q(1),Q(2:5),Q(6),Q(7:10)
+
+// tor weights:
+constexpr double yaw_Wtrack_tor[3] = {.5,0,120};
+constexpr double yaw_Wu_tor        = 5;
+constexpr double yaw_Wstate_tor[4] = {500,1e-2,2,2};     //W(1),W(2:5),W(6),W(7:10) //TODO: fil this
+constexpr double yaw_Q_tor[4]      = {1e4,1e-1,2e-2,2e-2}; //Q(1),Q(2:5),Q(6),Q(7:10)
+
+constexpr std::array<double, 12> yaw_weights_mid = populateCollectiveWeightMatrices(yaw_Wtrack_mid,yaw_Wu_mid,yaw_Wstate_mid,yaw_Q_mid)  ;
+constexpr std::array<double, 12> yaw_weights_res = populateCollectiveWeightMatrices(yaw_Wtrack_res,yaw_Wu_res,yaw_Wstate_res,yaw_Q_res)  ;
+constexpr std::array<double, 12> yaw_weights_ext = populateCollectiveWeightMatrices(yaw_Wtrack_ext,yaw_Wu_ext,yaw_Wstate_ext,yaw_Q_ext)  ;
+constexpr std::array<double, 12> yaw_weights_tor = populateCollectiveWeightMatrices(yaw_Wtrack_tor,yaw_Wu_tor,yaw_Wstate_tor,yaw_Q_tor)  ;
+
+constexpr std::array<const std::array<double, 12> * , 4> yaw_weights  {  &yaw_weights_mid,   &yaw_weights_res,   &yaw_weights_ext,   &yaw_weights_tor } ;
+
+
+
+
+#pragma endregion
+
+
 
 
 
