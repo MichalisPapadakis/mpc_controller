@@ -6,4 +6,8 @@
   <node pkg="rqt_plot" type="rqt_plot" name="rqt_plot" output="screen">
   </node>
 
+  <node pkg="olympus_observer" type="olympusObserver" name="olympus_observer" output="screen">
+    <param name="robot" textfile="$(find olympus_observer)/configs/real_offsets.yaml" type="yaml"/>
+  </node>
+
 </launch>
