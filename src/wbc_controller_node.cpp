@@ -245,11 +245,10 @@ class whole_body_controller {
       //4.  Controller Timers:
       body_planner_timer = nh.createTimer(ros::Duration(TH_B),&whole_body_controller::body_planner_update,this); 
       leg_planner_timer  = nh.createTimer(ros::Duration(TH_L),&whole_body_controller::leg_planner_update,this);
-      //  trajectory timer
-      trajectory_timer = nh.createTimer(ros::Duration(TH_L/FR_LEG_TORQUE_N),&whole_body_controller::trajectory_publish,this);
-      // trajectory_timer = nh.createTimer(ros::Duration(2),&whole_body_controller::trajectory_publish,this);
+      trajectory_timer   = nh.createTimer(ros::Duration(TH_L/FR_LEG_TORQUE_N),&whole_body_controller::trajectory_publish,this);
+
       trajectory_timer.stop();
-      
+      leg_planner_timer.stop();
       //MPC initialization:
       body_planner_solver_init();
       leg_planner_solver_init();
@@ -361,6 +360,9 @@ class whole_body_controller {
     quat_current.setIdentity();
     quat_desired.setIdentity();
     twist_current.setZero();
+
+    xtraj_b.fill(0);
+    utraj_b.fill(0);
   }
 
   void body_planner_update_constraints(double *x0){
@@ -482,7 +484,7 @@ class whole_body_controller {
     //TODO: from parameter or something:
     tref_mh     << TORQUE_TARGET_X,TORQUE_TARGET_Y,TORQUE_TARGET_Z;
 
-    update_reset_algorithm_quantities();
+    // update_reset_algorithm_quantities();
 
     //Initialize result:
     xtraj_l.fill(0);
@@ -552,6 +554,10 @@ class whole_body_controller {
   /// @param  
   /// TODO: remove x0 - overwrite
   void leg_planner_update(const ros::TimerEvent&){
+    leg_planner_update_();
+  }
+
+  void leg_planner_update_(){
 
     Eigen::Matrix<double,10,1> x0 ;
 
@@ -599,21 +605,45 @@ class whole_body_controller {
 
   // ===== RESET ALGO METHODS ========
   void check_mode(){
-    //TODO: stabilization if close based on q_current*q_desired
+    int new_mode ; //[r: 0, p: 1, y: 2]
 
-    int max_id = resetting::get_max_u_id(utraj_b.data());
-    int & new_mode = max_id; //alias
+    //Impose particular modes when testing in testbed
+    if (controller_config >=1 && controller_config <= 3){
+      new_mode = controller_config - 1;
+    }else{
+      new_mode = resetting::get_max_u_id(utraj_b.data());
+    }
     
     //1. Check for very low torque:
-    if ( abs( utraj_b[max_id] ) < torque_magn_threshold ){
+    if ( abs( utraj_b[new_mode] ) < TORQUE_MAGNITUDE_THRESH ){
       new_mode = controller_mode::stabilizing ; 
+    }
+    if (BODY_PLANNER_TORQUE_TARGET && ( quat_desired.angularDistance(quat_current)<ANGULAR_STABILIZATION_THRESH ) ){
+      new_mode = controller_mode::stabilizing ;
     }
 
     if (new_mode != current_mode){
-      //TODO: set corresponding reset -> eg. closest
+      // Stabilizing 
+      if (new_mode == controller_mode::stabilizing ){
+        trajectory_timer.stop();
+        leg_planner_timer.stop(); //stop calculating trajectories
+
+      }else{ //torque producing mode
+        current_phase == phase::mid;
+        update_reset_algorithm_quantities();
+        publish_phase(0,controller_mode::stabilizing, current_phase);
+
+      }
+      current_mode =new_mode; 
+    }else{
+      if (current_mode !=controller_mode::stabilizing ){
+        check_phase();
+      }else{
+        publish_phase(0,controller_mode::stabilizing, 0);
+      }
     } 
 
-    current_mode = controller_mode::yaw; 
+
   }  
 
   void check_phase(){
@@ -639,12 +669,19 @@ class whole_body_controller {
       update_reset_algorithm_quantities();
     }
 
+    publish_phase(error_norm,current_mode, current_phase);
+  }
+
+  void publish_phase(const double & error_norm, const int & mode, const int & phase ){
     phase_msg.error = error_norm;
-    phase_msg.phase = static_cast<u_int8_t>( current_phase ) ;
+    phase_msg.mode = mode;
+    phase_msg.phase = static_cast<u_int8_t>( phase ) ;
     phase_msg.header.stamp  =ros::Time::now();
     phase_publisher.publish(phase_msg);
   }
 
+
+  /// @brief This function resets the leg_planner, updating the weights and rerunning it immediately
   void update_reset_algorithm_quantities(){
     // RESET SELF QUANTITIES:
     using namespace resetting ;
@@ -681,6 +718,9 @@ class whole_body_controller {
 
       leg_plannet_update_weightsANDreference();
 
+      leg_planner_timer.stop();
+      leg_planner_update_(); //this starts the trajectory timer
+      leg_planner_timer.start();
   }
 
 
@@ -889,14 +929,10 @@ ros::Rate loop_rate(loop_freq); //HZ
 whole_body_controller wbc;
 
 Eigen::Vector3d qd(0,1.8000,-0.7000);
-// auto timer  = nh.createTimer(ros::Duration(5),
-// [&wbc, qd](const ros::TimerEvent&) { wbc.mpc_update_ocp(qd); },true,true);
 
-auto timer  = nh.createTimer(ros::Duration(2),&whole_body_controller::body_planner_update,&wbc ,true);
-auto timer2  = nh.createTimer(ros::Duration(1),&whole_body_controller::leg_planner_update,&wbc ,true);
 
 while(ros::ok()){
-  wbc.check_phase();
+  wbc.check_mode();
   ros::spinOnce(); // Process any callbacks
   loop_rate.sleep();
 }

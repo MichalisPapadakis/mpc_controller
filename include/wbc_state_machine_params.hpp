@@ -9,7 +9,8 @@ enum phase {mid, reset, ext, torque };
 
 
 namespace resetting{
-#define torque_magn_threshold 0.2 
+#define TORQUE_MAGNITUDE_THRESH 0.2 
+#define ANGULAR_STABILIZATION_THRESH (2.5*M_PI/180)
 constexpr int NUMBER_OF_PHASES = 4;
 
 //u is saved in a large array
