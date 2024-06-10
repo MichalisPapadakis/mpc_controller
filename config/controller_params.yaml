@@ -20,3 +20,10 @@ rl_motor_ids: [9,8,7]
 body_desired_pose_topic: "olympus/desired_angle"
 body_current_pose_topic: "/qualisys/olympus/odom"
 controller_mode : 3 #choose from [0: weld, 1: revolute_x, 2: revolute_y, 3: revolute_z, 4: floating]
+
+stabilization_mode: true
+manoeuvre_target_torque: [0,0,2]
+
+offset_roll: 40
+offset_pitch: 0
+offset_yaw: 0

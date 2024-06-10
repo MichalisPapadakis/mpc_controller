@@ -31,12 +31,8 @@
 #define TH_B 0.1
 #define PRINT_LEG_PLANNER_MPC_RESULTS false
 #define PRINT_BODY_PLANNER_MPC_RESULTS false
-#define DEBUG_TRAJECTORY_PUBLISHING false
+#define DEBUG_TRAJECTORY_PUBLISHING true
 
-#define TORQUE_TARGET_X 0
-#define TORQUE_TARGET_Y 0
-#define TORQUE_TARGET_Z 1
-#define BODY_PLANNER_TORQUE_TARGET true
 
 //This are read from a config in WBC class
 struct leg_controller_opt{
@@ -205,6 +201,18 @@ class whole_body_controller {
         }
       }
 
+      if ( !nh_param.getParam("stabilization_mode",stabilization_mode) ){
+           ROS_ERROR_STREAM("[mpc controller]: Couldn't read parameter: stabilization_mode.  ");
+      }
+      std::vector<double> default_torque;
+      if ( !nh_param.getParam("manoeuvre_target_torque",default_torque) ){
+           ROS_ERROR_STREAM("[mpc controller]: Couldn't read parameter: manoeuvre_target_torque.  ");
+      }else{
+        if (default_torque.size()==3){
+          for (int i=0;i<3;i++){ default_torque_target[i] = default_torque[i]; }
+        }else {ROS_ERROR_STREAM("[mpc controller]: Default torque target must contain 3 elements, 2 of which 0: [tx ty tz] "); }        
+      }
+
       //TODO: leg_order from config
       std::array<int,4> leg_order{1,3,0,2};
 
@@ -247,8 +255,8 @@ class whole_body_controller {
       leg_planner_timer  = nh.createTimer(ros::Duration(TH_L),&whole_body_controller::leg_planner_update,this);
       trajectory_timer   = nh.createTimer(ros::Duration(TH_L/FR_LEG_TORQUE_N),&whole_body_controller::trajectory_publish,this);
 
-      trajectory_timer.stop();
-      leg_planner_timer.stop();
+      // trajectory_timer.stop();
+      // leg_planner_timer.stop();
       //MPC initialization:
       body_planner_solver_init();
       leg_planner_solver_init();
@@ -436,10 +444,15 @@ class whole_body_controller {
       d_print_exp_tran_mat( SRBD_NU, N_b, utraj_b.data(), SRBD_NU );
     }
 
-    if (BODY_PLANNER_TORQUE_TARGET){
+    if (stabilization_mode){
       double CV = -1; //for yaw
+
+      tref_mh << CV*utraj_b[0],CV*utraj_b[1], MAX(MIN( CV*utraj_b[2], 2.5),1.5)  ;
+      if (current_mode == controller_mode::yaw ){
+        if ( quat_desired.angularDistance(quat_current)*180./M_PI > 12) {  tref_mh[2] = 2;  }
+      }
       
-      tref_mh << CV*utraj_b[0],CV*utraj_b[1],CV* MIN(utraj_b[2],1.5);
+      
       ROS_INFO("tref_body = [%.1f,%.1f,%.1f]",utraj_b[0],utraj_b[1],utraj_b[2]);
       ROS_INFO("tref_mpc = [%.1f,%.1f,%.1f]",tref_mh[0],tref_mh[1],tref_mh[2]);
     }
@@ -482,9 +495,9 @@ class whole_body_controller {
     y_ref.setZero();
 
     //TODO: from parameter or something:
-    tref_mh     << TORQUE_TARGET_X,TORQUE_TARGET_Y,TORQUE_TARGET_Z;
+    tref_mh     << default_torque_target[0],default_torque_target[1],default_torque_target[2];
 
-    // update_reset_algorithm_quantities();
+    update_reset_algorithm_quantities();
 
     //Initialize result:
     xtraj_l.fill(0);
@@ -551,6 +564,7 @@ class whole_body_controller {
   /// @brief This function is called by the `leg_planner_timer` and: 
   /// 1. Reads the current state 
   /// 2. Evaluates the mpc
+  /// 3. Resets the trajectory timer (even if allready stopped)
   /// @param  
   /// TODO: remove x0 - overwrite
   void leg_planner_update(const ros::TimerEvent&){
@@ -615,27 +629,31 @@ class whole_body_controller {
     }
     
     //1. Check for very low torque:
-    if ( abs( utraj_b[new_mode] ) < TORQUE_MAGNITUDE_THRESH ){
-      new_mode = controller_mode::stabilizing ; 
-    }
-    if (BODY_PLANNER_TORQUE_TARGET && ( quat_desired.angularDistance(quat_current)<ANGULAR_STABILIZATION_THRESH ) ){
+    // if (stabilization_mode && abs( utraj_b[new_mode] ) < TORQUE_MAGNITUDE_THRESH ){
+    //   new_mode = controller_mode::stabilizing ; 
+    // }
+    if (stabilization_mode && ( quat_desired.angularDistance(quat_current)<ANGULAR_STABILIZATION_THRESH ) ){
       new_mode = controller_mode::stabilizing ;
     }
 
     if (new_mode != current_mode){
-      // Stabilizing 
+      current_mode =new_mode;
+
       if (new_mode == controller_mode::stabilizing ){
         trajectory_timer.stop();
-        leg_planner_timer.stop(); //stop calculating trajectories
-
+        leg_planner_timer.stop(); 
+        publish_phase(0,controller_mode::stabilizing, 0);
+      
       }else{ //torque producing mode
+        
         current_phase == phase::mid;
-        update_reset_algorithm_quantities();
-        publish_phase(0,controller_mode::stabilizing, current_phase);
+        update_reset_algorithm_quantities(); //update W,qref,resetting params and pass them to solver
+        reset_leg_planner_publish();
+        publish_phase(0,current_mode, current_phase);
 
       }
-      current_mode =new_mode; 
-    }else{
+
+    }else{ //same mode
       if (current_mode !=controller_mode::stabilizing ){
         check_phase();
       }else{
@@ -666,7 +684,8 @@ class whole_body_controller {
 
       //TODO: for every mode
       //4. Update the Weighting matrices, current setpoint, threshold 
-      update_reset_algorithm_quantities();
+      update_reset_algorithm_quantities(); //update weights-reference-resseting params and pass them to solver
+      reset_leg_planner_publish(); //first run and resetting timers
     }
 
     publish_phase(error_norm,current_mode, current_phase);
@@ -681,7 +700,8 @@ class whole_body_controller {
   }
 
 
-  /// @brief This function resets the leg_planner, updating the weights and rerunning it immediately
+  /// @brief This function calculates the updated weights/setpoints/resetting threshold based on the current phase, and then calls 
+  /// `leg_plannet_update_weightsANDreference` to pass it to the mpc solver struct.
   void update_reset_algorithm_quantities(){
     // RESET SELF QUANTITIES:
     using namespace resetting ;
@@ -694,8 +714,7 @@ class whole_body_controller {
       ROS_INFO("[wbc controller]: Current phase is : %d",current_phase);
       ROS_INFO("[wbc controller]: Current threshold  is : %.1f",Th_intterupt);
 
-      // MPC WEIGHTS SELF QUANTITIES:
-      //TODO: change cost function weights
+      // MPC WEIGHTS AND REFERENCE
       qref = q_interrupt; 
 
       const std::array< double,12> * weights_ptr =  yaw_weights [current_phase] ;
@@ -718,9 +737,13 @@ class whole_body_controller {
 
       leg_plannet_update_weightsANDreference();
 
-      leg_planner_timer.stop();
-      leg_planner_update_(); //this starts the trajectory timer
-      leg_planner_timer.start();
+  }
+
+  void reset_leg_planner_publish(){
+    leg_planner_timer.stop();
+    leg_planner_update_(); //this starts the trajectory timer
+    leg_planner_timer.start();
+
   }
 
 
@@ -743,9 +766,9 @@ class whole_body_controller {
     if (pitch_mode){
       qd_fl[1] =  qd_fr[1];
       qd_fl[2] = -qd_fr[2];
-    }else{
-      qd_fl[1] =  qd_fr[2];
-      qd_fl[2] = -qd_fr[1];
+    }else{ //yaw mode
+      qd_fl[1] =  qd_fr[2]-40;
+      qd_fl[2] = -(qd_fr[1]+40);
     }
 
     //Same side mimic:
@@ -808,7 +831,8 @@ class whole_body_controller {
   int leg_planner_counter = 0;
 
   int controller_config = base_joint::floating; //weather base is fixed or not -> how to read values
-
+  bool stabilization_mode = true;
+  std::array<double,3> default_torque_target;
   // ===== BODY PLANNER PARAMETERS ========
   #pragma region
   // --- ros specific ---:
@@ -922,13 +946,11 @@ int main(int argc, char **argv) {
 ros::init(argc, argv, "mpc_controller");
 ros::NodeHandle nh;
 
-double loop_freq = 100 ;
+double loop_freq = 1000 ;
 ros::Rate loop_rate(loop_freq); //HZ
 #pragma endregion
 
 whole_body_controller wbc;
-
-Eigen::Vector3d qd(0,1.8000,-0.7000);
 
 
 while(ros::ok()){

@@ -10,7 +10,7 @@ enum phase {mid, reset, ext, torque };
 
 namespace resetting{
 #define TORQUE_MAGNITUDE_THRESH 0.2 
-#define ANGULAR_STABILIZATION_THRESH (2.5*M_PI/180)
+#define ANGULAR_STABILIZATION_THRESH (2.5 *M_PI/180)
 constexpr int NUMBER_OF_PHASES = 4;
 
 //u is saved in a large array
@@ -150,7 +150,7 @@ constexpr double yaw_Q_ext[4]      = {100,100,200,1}; //Q(1),Q(2:5),Q(6),Q(7:10)
 constexpr double yaw_Wtrack_tor[3] = {.5,0,120};
 constexpr double yaw_Wu_tor        = 5;
 constexpr double yaw_Wstate_tor[4] = {500,1e-2,2,2};     //W(1),W(2:5),W(6),W(7:10) //TODO: fil this
-constexpr double yaw_Q_tor[4]      = {1e4,1e-1,2e-2,2e-2}; //Q(1),Q(2:5),Q(6),Q(7:10)
+constexpr double yaw_Q_tor[4]      = {1e3,1e-1,2e-2,2e-2}; //Q(1),Q(2:5),Q(6),Q(7:10)
 
 constexpr std::array<double, 12> yaw_weights_mid = populateCollectiveWeightMatrices(yaw_Wtrack_mid,yaw_Wu_mid,yaw_Wstate_mid,yaw_Q_mid)  ;
 constexpr std::array<double, 12> yaw_weights_res = populateCollectiveWeightMatrices(yaw_Wtrack_res,yaw_Wu_res,yaw_Wstate_res,yaw_Q_res)  ;
