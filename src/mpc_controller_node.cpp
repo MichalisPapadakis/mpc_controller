@@ -247,7 +247,8 @@ class whole_body_controller {
     auto qd = leg_controllers[0]->leg_state_estimation(qdesired);
 
     //TODO: fix kinematics to use setpoint based on command:
-    qd <<  0,1.8000,-1.1703,-0.7000,0.4087;
+    // qd <<  0,1.8000,-1.1703,-0.7000,0.4087;
+    qd << 0.7854,    0.3491,   -0.5528,   0.3491,    0.5590;
 
     Eigen::Matrix<double,10,1> xd ;
     xd.setZero();
@@ -256,7 +257,8 @@ class whole_body_controller {
     ROS_INFO_STREAM("setpoint is:" <<qd); //devugging:
 
     Eigen::Matrix<double,10,1> x0 ;
-    x0 = leg_controllers[0]->get_full_state()*M_PI/180;
+    x0 = leg_controllers[0]->get_full_state();
+    x0[3] *=-1;
 
     mpc_update_constraints(x0.data(),xd.data());
     initialize_mpc(x0,xd);
@@ -346,7 +348,7 @@ class whole_body_controller {
     allocation(pos*180/M_PI);
     trajectory_timer.setPeriod( ros::Duration( dt_traj[i-1]) );
     
-    if (i == FR_LEG_POS_N+1){
+    if (i == FR_LEG_POS_N){
       i=0;
       trajectory_timer.stop();
     }
