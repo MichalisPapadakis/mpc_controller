@@ -108,6 +108,10 @@ constexpr std::array<double  , 4>                       pitch_thresholds {pitch_
 // ===== YAW: ======== 
 #pragma region 
 
+#define YAW_MAX_POS_TRACKING_TORQUE 1.5
+#define YAW_MAX_NEG_TRACKING_TORQUE -2
+#define SATURATE_YAW(x)  (   MAX( MIN(x, YAW_MAX_POS_TRACKING_TORQUE), YAW_MAX_NEG_TRACKING_TORQUE) )
+
 constexpr std::array<double,5> yaw_pos {1.4500,   -1.1000,    0.0816,    1.8500,    1.0829 } ;
 constexpr std::array<double,5> yaw_neg {1.4700,    1.0400,   -0.7702,   -0.6000,   -0.1164 } ;
 constexpr std::array<double,5> yaw_mid {     0,    0.6800,   -1.2675,    1.0000,    1.3578 } ;

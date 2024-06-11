@@ -447,9 +447,15 @@ class whole_body_controller {
     if (stabilization_mode){
       double CV = -1; //for yaw
 
-      tref_mh << CV*utraj_b[0],CV*utraj_b[1], MAX(MIN( CV*utraj_b[2], 2.5),1.5)  ;
+      tref_mh << CV*utraj_b[0],CV*utraj_b[1], SATURATE_YAW(CV*utraj_b[2]) ;
       if (current_mode == controller_mode::yaw ){
-        if ( quat_desired.angularDistance(quat_current)*180./M_PI > 12) {  tref_mh[2] = 2;  }
+        if ( quat_desired.angularDistance(quat_current)*180./M_PI > 25) { 
+
+          is_direction_positive = ( tref_mh[2] > 0 ) ? true : false;
+          
+          if ( is_direction_positive){ tref_mh[2] =  YAW_MAX_POS_TRACKING_TORQUE; }
+          if (!is_direction_positive){ tref_mh[2] =  YAW_MAX_NEG_TRACKING_TORQUE; }
+        }
       }
       
       
@@ -628,7 +634,7 @@ class whole_body_controller {
       new_mode = resetting::get_max_u_id(utraj_b.data());
     }
     
-    is_direction_positive = ( tref_mh[new_mode] > 0 ) ? true : false;
+    is_direction_positive = ( tref_mh[new_mode] > 0 ) ? true : false; 
 
     //1. Check for very low torque:
     // if (stabilization_mode && abs( utraj_b[new_mode] ) < TORQUE_MAGNITUDE_THRESH ){
