@@ -593,6 +593,8 @@ class whole_body_controller {
     //Solve: 
     int status = fr_leg_torque_acados_solve(acados_ocp_capsule_leg);
 
+    trajectory_timer.stop(); //have the solution, so do not update the trajectory. I just have to get it
+
     double elapsed_time;
     //Get data:
     ocp_nlp_get(nlp_config_leg, nlp_solver_leg, "time_tot", &elapsed_time);
@@ -609,8 +611,8 @@ class whole_body_controller {
     leg_planner_mpc_status.solution_time = 1e3*elapsed_time;
     leg_planner_status_pub.publish(leg_planner_mpc_status);
 
+    // trajectory_timer.stop();
     trajectory_indexer = 0;
-    trajectory_timer.stop();
     trajectory_publish_();
     trajectory_timer.start();
 
@@ -829,7 +831,7 @@ class whole_body_controller {
       ROS_DEBUG_STREAM("Wtrack is"<<Wtrack);
     }
 
-    if (i == FR_LEG_TORQUE_N+1){
+    if (i == FR_LEG_TORQUE_N){
       ROS_INFO_STREAM("reaching end of traj");
       i=0;
       trajectory_timer.stop();
