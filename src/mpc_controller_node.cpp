@@ -303,22 +303,27 @@ class whole_body_controller {
     //pitch-yaw
     if (pitch_mode){
       qd_fl[1] =  qd_fr[1];
-      qd_fl[2] = -qd_fr[2];
-    }else{
-      qd_fl[1] =  qd_fr[2];
-      qd_fl[2] = -qd_fr[1];
+      qd_fl[2] =  qd_fr[2];
+    }else{ //yaw mode
+      qd_fl[1] = -qd_fr[2]-40;
+      qd_fl[2] = -(qd_fr[1]+40);
     }
 
     //Same side mimic:
     qd_rr[0] = -qd_fr[0]; //ok
-    qd_rr[1] = -qd_fr[2];
+    qd_rr[1] =  qd_fr[2];
     qd_rr[2] =  qd_fr[1];
 
     qd_rl[0] = -qd_fl[0]; //ok
     qd_rl[1] = -qd_fl[2];
     qd_rl[2] = -qd_fl[1];
 
-    std::array< const Eigen::Vector3f *, 4> qd{&qd_fr,&qd_rr,&qd_fl,&qd_rl};
+    //update signs:
+    qd_fl[1] *= -1;
+    qd_fl[2] *= -1;
+
+
+    std::array<const Eigen::Vector3f *, 4> qd{&qd_fr,&qd_rr,&qd_fl,&qd_rl};
     for (int i=0; i<4; i++){ 
       leg_controllers[i] -> setCommand( *qd[i] ); 
     }
@@ -335,6 +340,9 @@ class whole_body_controller {
     double & qHO = xtraj[i*NX +3 ];
 
     Eigen::Vector3f pos(qMH,qHI,qHO);
+
+    pos[2] *= -1;
+
     allocation(pos*180/M_PI);
     trajectory_timer.setPeriod( ros::Duration( dt_traj[i-1]) );
     

@@ -604,8 +604,9 @@ class whole_body_controller {
 
     Eigen::Matrix<double,10,1> x0 ;
 
-    //TODO: what value am i reading? deg or rads?
-    x0 = leg_controllers[0]->get_full_state();//*M_PI/180; //get fr leg state
+    //Reading from /joint_states-> so x0 is in rads
+    x0 = leg_controllers[0]->get_full_state();
+    x0[3] *= -1;  //hack for sings:
     
     leg_planner_update_constraints(x0.data());
     leg_planner_initialize_solution(x0);
@@ -700,7 +701,8 @@ class whole_body_controller {
   void check_phase(){
     using namespace resetting ;
     //1. read state from front_right leg
-    auto& q_fr = leg_controllers[0]->get_full_state_ptr()->head(5) ; 
+    auto q_fr = leg_controllers[0]->get_full_state().head(5) ; 
+    q_fr[3] *= -1;
 
     //2. calculate error:
     Eigen::Matrix<double,5,1> q_error = q_fr - q_interrupt;  
@@ -818,20 +820,24 @@ class whole_body_controller {
     //pitch-yaw
     if (pitch_mode){
       qd_fl[1] =  qd_fr[1];
-      qd_fl[2] = -qd_fr[2];
+      qd_fl[2] =  qd_fr[2];
     }else{ //yaw mode
-      qd_fl[1] =  qd_fr[2]-40;
+      qd_fl[1] = -qd_fr[2]-40;
       qd_fl[2] = -(qd_fr[1]+40);
     }
 
     //Same side mimic:
     qd_rr[0] = -qd_fr[0]; //ok
-    qd_rr[1] = -qd_fr[2];
+    qd_rr[1] =  qd_fr[2];
     qd_rr[2] =  qd_fr[1];
 
     qd_rl[0] = -qd_fl[0]; //ok
     qd_rl[1] = -qd_fl[2];
     qd_rl[2] = -qd_fl[1];
+
+    // hack to update signs:
+    qd_fl[1] *= -1;
+    qd_fl[2] *= -1;
 
     std::array< const Eigen::Vector3f *, 4> qd{&qd_fr,&qd_rr,&qd_fl,&qd_rl};
     for (int i=0; i<4; i++){ 
@@ -854,6 +860,8 @@ class whole_body_controller {
     double & qHO = xtraj_l[i*FR_LEG_TORQUE_NX +3 ];
 
     Eigen::Vector3f pos(qMH,qHI,qHO);
+    // hack to update signs:
+    pos[2] *= -1;
     allocation(pos*180/M_PI);
 
     if (DEBUG_TRAJECTORY_PUBLISHING){
