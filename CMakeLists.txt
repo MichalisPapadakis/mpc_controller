@@ -145,7 +145,6 @@ add_executable(${PROJECT_NAME}_node src/mpc_controller_node.cpp)
 add_executable(wbc_controller_node src/wbc_controller_node.cpp)
 
 
-add_executable(test_acados src/test_node.cpp)
 add_executable(test_acados_SRBD src/test_node_SRBD.cpp)
 add_executable(test_acados_torque src/test_node_torque.cpp)
 
@@ -176,11 +175,6 @@ target_include_directories(wbc_controller_node PRIVATE ${ACADOS_INCLUDE_DIRS} c_
 target_link_directories(wbc_controller_node PRIVATE ${ACADOS_LIB_PATH}) #to link agains libss
 
 
-
-
-target_include_directories(test_acados PRIVATE ${ACADOS_INCLUDE_DIRS} c_generated_code) 
-target_link_libraries(test_acados ${catkin_LIBRARIES}   acados_ocp_solver_fr_leg_pos )
-target_link_directories(test_acados PRIVATE ${ACADOS_LIB_PATH}) 
 
 target_include_directories(test_acados_SRBD PRIVATE ${ACADOS_INCLUDE_DIRS}  c_generated_code_SRBD) 
 target_link_libraries(test_acados_SRBD ${catkin_LIBRARIES}    acados_ocp_solver_SRBD )
