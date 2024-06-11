@@ -115,7 +115,9 @@ constexpr std::array<double  , 4>                       pitch_thresholds {pitch_
 constexpr std::array<double,5> yaw_pos {1.4500,   -1.1000,    0.0816,    1.8500,    1.0829 } ;
 constexpr std::array<double,5> yaw_neg {1.4700,    1.0400,   -0.7702,   -0.6000,   -0.1164 } ;
 constexpr std::array<double,5> yaw_mid {     0,    0.6800,   -1.2675,    1.0000,    1.3578 } ;
-constexpr std::array<double,5> yaw_ext { 1.300,    0.1500,   -0.4166,    0.4700 ,   0.5689 } ;
+constexpr std::array<double,5> yaw_ext { 1.300,    0.1500,   -0.4166,    0.4700,    0.5689 } ;
+
+constexpr std::array<double,5> yaw_CG {1.0550,    0.1925,   -0.5953,    0.6800,    0.7863 } ;
 
 
 constexpr std::array<double,5> yaw_W_mid {   1,1,0,1,0 } ;

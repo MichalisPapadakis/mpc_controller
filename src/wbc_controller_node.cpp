@@ -164,9 +164,13 @@ class whole_body_controller {
       #pragma region
       std::string param_name;
 
+      //Leg parameters:
       std::array<std::string,4> leg_prefix{ "fr","rr","fl","rl"};
       std::array< std::vector<int>,4 > joint_state_ids;
       std::array< std::vector<int>,4 > motor_ids;
+
+      std::array<int,4> leg_order{1,3,0,2}; //default leg order
+      std::vector<int> leg_order_;
 
       for (int i=0; i<4; i++){
         param_name = leg_prefix[i]+"_joint_state_ids";
@@ -179,7 +183,18 @@ class whole_body_controller {
            ROS_ERROR_STREAM("[mpc controller]: Couldn't read parameter: " << param_name);
         }
       }
+      
+      if ( !nh_param.getParam("leg_order",leg_order_) ){
+           ROS_ERROR_STREAM("[mpc controller]: Couldn't read parameter: leg_order ");
+      }else { 
+        if (leg_order_.size()!=4){
+          ROS_ERROR_STREAM("[mpc controller]: Expected 4 ids for leg order. Using default order ");
+        }else{
+          for(int i=0; i< 4; i++){leg_order[i] = leg_order_[i]; }
+        }
+      }
 
+      //Ros topics:
       std::string body_current_pose_topic = "/qualisys/olympus/odom"; 
       std::string body_desired_pose_topic= "olympus/desired_angle";
       if ( !nh_param.getParam("body_current_pose_topic",body_current_pose_topic) ){
@@ -189,6 +204,8 @@ class whole_body_controller {
       if ( !nh_param.getParam("body_desired_pose_topic",body_desired_pose_topic) ){
            ROS_ERROR_STREAM("[mpc controller]: Couldn't read parameter: body_desired_pose_topic ");
       }
+      
+      //Controller options:
       int controller_mode_param = 0;
       if ( !nh_param.getParam("controller_mode",controller_mode_param) ){
            ROS_ERROR_STREAM("[mpc controller]: Couldn't read parameter: controller_mode. Selecting floating controller mode ");
@@ -213,8 +230,14 @@ class whole_body_controller {
         }else {ROS_ERROR_STREAM("[mpc controller]: Default torque target must contain 3 elements, 2 of which 0: [tx ty tz] "); }        
       }
 
-      //TODO: leg_order from config
-      std::array<int,4> leg_order{1,3,0,2};
+      std::vector<double> contracting_parameters;
+      if ( !nh_param.getParam("contracting_param",contracting_parameters) ){
+           ROS_ERROR_STREAM("[mpc controller]: Couldn't read parameter: contracting_param.  ");
+      }else{
+        if (contracting_parameters.size()==4){
+          for (int i=0;i<4;i++){ contracting_param[i] = contracting_parameters[i]; }
+        }else {ROS_ERROR_STREAM("[mpc controller]: Expected 4 contracting_parameters. "); }        
+      }
 
       #pragma endregion
       
@@ -726,6 +749,8 @@ class whole_body_controller {
       populate_diagonal(W_interrupt,*( yaw_W          [resetting_param_id] ) );
       populate_vector  (q_interrupt,*( yaw_setpoints  [resetting_param_id] ) );
       Th_intterupt = yaw_thresholds [resetting_param_id];
+
+      contracting_ws(resetting_param_id); //quick hack
       
       double conv = 180./M_PI;
       ROS_INFO("[wbc controller]: Current setpoint is: [%.1f,%.1f,%.1f]",q_interrupt[0]*conv,q_interrupt[1]*conv,q_interrupt[3]*conv);
@@ -764,6 +789,16 @@ class whole_body_controller {
 
   }
 
+
+  void contracting_ws(const int &  resetting_param){
+    using namespace resetting ;
+    Eigen::Matrix<double,5,1> yaw_CG_vec;
+    populate_vector  (yaw_CG_vec,yaw_CG );
+
+    double l = contracting_param[resetting_param];
+
+    q_interrupt = q_interrupt*l + (1-l)*yaw_CG_vec; 
+  }
 
   // ===== TRAJECTORY PLAYBACK FUNCTIONS ========
   private:
@@ -850,7 +885,10 @@ class whole_body_controller {
 
   int controller_config = base_joint::floating; //weather base is fixed or not -> how to read values
   bool stabilization_mode = true;
+  
   std::array<double,3> default_torque_target;
+  std::array<double,4> contracting_param{1,1,1,1};
+
   // ===== BODY PLANNER PARAMETERS ========
   #pragma region
   // --- ros specific ---:
