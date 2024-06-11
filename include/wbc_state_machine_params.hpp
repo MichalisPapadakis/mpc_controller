@@ -143,13 +143,13 @@ constexpr double yaw_Q_res[4]      = {100,10,5e-3,5e-3}; //Q(1),Q(2:5),Q(6),Q(7:
 // ext weights:
 constexpr double yaw_Wtrack_ext[3] = {1,0,5};
 constexpr double yaw_Wu_ext        = 5e-1;
-constexpr double yaw_Wstate_ext[4] = {1e-2,1e-2,2,2};     //W(1),W(2:5),W(6),W(7:10) //TODO: fil this
+constexpr double yaw_Wstate_ext[4] = {1e-2,1e-2,2,2};     //W(1),W(2:5),W(6),W(7:10) 
 constexpr double yaw_Q_ext[4]      = {100,100,200,1}; //Q(1),Q(2:5),Q(6),Q(7:10)
 
 // tor weights:
 constexpr double yaw_Wtrack_tor[3] = {.5,0,120};
 constexpr double yaw_Wu_tor        = 5;
-constexpr double yaw_Wstate_tor[4] = {500,1e-2,2,2};     //W(1),W(2:5),W(6),W(7:10) //TODO: fil this
+constexpr double yaw_Wstate_tor[4] = {500,1e-2,2,2};     //W(1),W(2:5),W(6),W(7:10) 
 constexpr double yaw_Q_tor[4]      = {1e3,1e-1,2e-2,2e-2}; //Q(1),Q(2:5),Q(6),Q(7:10)
 
 constexpr std::array<double, 12> yaw_weights_mid = populateCollectiveWeightMatrices(yaw_Wtrack_mid,yaw_Wu_mid,yaw_Wstate_mid,yaw_Q_mid)  ;

@@ -628,6 +628,8 @@ class whole_body_controller {
       new_mode = resetting::get_max_u_id(utraj_b.data());
     }
     
+    is_direction_positive = ( tref_mh[new_mode] > 0 ) ? true : false;
+
     //1. Check for very low torque:
     // if (stabilization_mode && abs( utraj_b[new_mode] ) < TORQUE_MAGNITUDE_THRESH ){
     //   new_mode = controller_mode::stabilizing ; 
@@ -703,11 +705,19 @@ class whole_body_controller {
   /// @brief This function calculates the updated weights/setpoints/resetting threshold based on the current phase, and then calls 
   /// `leg_plannet_update_weightsANDreference` to pass it to the mpc solver struct.
   void update_reset_algorithm_quantities(){
+    std::array<int,4>  phase_order{0,1,2,3}; 
+    if ( !is_direction_positive) { 
+      phase_order[1] = 3;
+      phase_order[3] = 1;
+    }
+    int resetting_param_id = phase_order[current_phase]; 
+    ROS_INFO("resetting param is: %d",resetting_param_id);
+    
     // RESET SELF QUANTITIES:
     using namespace resetting ;
-      populate_diagonal(W_interrupt,*( yaw_W          [current_phase] ) );
-      populate_vector  (q_interrupt,*( yaw_setpoints  [current_phase] ) );
-      Th_intterupt = yaw_thresholds [current_phase ];
+      populate_diagonal(W_interrupt,*( yaw_W          [resetting_param_id] ) );
+      populate_vector  (q_interrupt,*( yaw_setpoints  [resetting_param_id] ) );
+      Th_intterupt = yaw_thresholds [resetting_param_id];
       
       double conv = 180./M_PI;
       ROS_INFO("[wbc controller]: Current setpoint is: [%.1f,%.1f,%.1f]",q_interrupt[0]*conv,q_interrupt[1]*conv,q_interrupt[3]*conv);
@@ -879,6 +889,7 @@ class whole_body_controller {
 
   int current_mode  = controller_mode::stabilizing; //enum {r: 0, p: 1, y: 2, stabilization: 3} 
   int current_phase = phase::mid;                   //enum. Always starts from mid
+  bool is_direction_positive = true; 
 
   bool cancel_roll = true;                          //TODO: maybe do not use
   bool pitch_mode  = false;
