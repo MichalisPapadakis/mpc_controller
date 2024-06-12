@@ -1,0 +1,9 @@
+<launch>
+
+
+  <node name="rqt" pkg="rqt_gui" type="rqt_gui" 
+  args=" --perspective-file $(find mpc_controller)/config/wbc_logging.perspective"/>
+
+
+
+</launch>

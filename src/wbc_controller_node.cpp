@@ -27,7 +27,8 @@
 
 // WBC defines:
 #include "wbc_state_machine_params.hpp"
-#define TH_L 0.3
+#define TH_L 0.1
+#define TRAJ_RATE  0.05
 #define TH_B 0.1
 #define PRINT_LEG_PLANNER_MPC_RESULTS false
 #define PRINT_BODY_PLANNER_MPC_RESULTS false
@@ -294,7 +295,7 @@ class whole_body_controller {
       //4.  Controller Timers:
       body_planner_timer = nh.createTimer(ros::Duration(TH_B),&whole_body_controller::body_planner_update,this); 
       leg_planner_timer  = nh.createTimer(ros::Duration(TH_L),&whole_body_controller::leg_planner_update,this);
-      trajectory_timer   = nh.createTimer(ros::Duration(TH_L/FR_LEG_TORQUE_N),&whole_body_controller::trajectory_publish,this);
+      trajectory_timer   = nh.createTimer(ros::Duration(TRAJ_RATE),&whole_body_controller::trajectory_publish,this);
 
       // trajectory_timer.stop();
       // leg_planner_timer.stop();
@@ -847,6 +848,7 @@ class whole_body_controller {
     populate_vector  (cg_vec, (*mode_CG[current_mode]) );
 
     double l = contracting_param[resetting_param];
+    Th_intterupt *= MIN(l,0.4);
 
     q_interrupt = q_interrupt*l + (1-l)*cg_vec; 
   }
@@ -889,11 +891,11 @@ class whole_body_controller {
     qd_fl[2] *= -1;
 
     std::array< const Eigen::Vector3f *, 4> qd{&qd_fr,&qd_rr,&qd_fl,&qd_rl};
-    // for (int i=0; i<4; i++){ 
-    //   leg_controllers[i] -> setCommand( *qd[i] ); 
-    // }
+    for (int i=0; i<4; i++){ 
+      leg_controllers[i] -> setCommand( *qd[i] ); 
+    }
 
-    leg_controllers[0] -> setCommand( *qd[0] ); 
+    // leg_controllers[0] -> setCommand( *qd[0] ); 
 
   }
 
@@ -903,7 +905,12 @@ class whole_body_controller {
 
   void trajectory_publish_(){
     int & i = trajectory_indexer ;
-    i++;
+    if (i==0){
+      i=3;
+    }else{
+      i=5;
+    }
+
 
     // Eigen::Vector3f pos(qMH_t[i],qHI_t[i],qHO_t[i]);
     double & qMH = xtraj_l[i*FR_LEG_TORQUE_NX    ];

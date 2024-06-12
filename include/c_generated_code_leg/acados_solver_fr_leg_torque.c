@@ -769,12 +769,19 @@ void fr_leg_torque_acados_create_5_set_nlp_in(fr_leg_torque_solver_capsule* caps
     double* lbu = lubu;
     double* ubu = lubu + NBU;
     
-    lbu[0] = -10;
-    ubu[0] = 10;
-    lbu[1] = -10;
-    ubu[1] = 10;
-    lbu[2] = -10;
-    ubu[2] = 10;
+    // lbu[0] = -10;
+    // ubu[0] = 10;
+    // lbu[1] = -10;
+    // ubu[1] = 10;
+    // lbu[2] = -10;
+    // ubu[2] = 10;
+
+    lbu[0] = -4;
+    ubu[0] =  4;
+    lbu[1] = -4;
+    ubu[1] =  4;
+    lbu[2] = -4;
+    ubu[2] =  4;
 
     for (int i = 0; i < N; i++)
     {
@@ -859,16 +866,16 @@ void fr_leg_torque_acados_create_5_set_nlp_in(fr_leg_torque_solver_capsule* caps
     ubx[3] = 3.8776;
     lbx[4] = -1.2222;
     ubx[4] = 2.6878;
-    lbx[5] = -16;
-    ubx[5] = 16;
-    lbx[6] = -16;
-    ubx[6] = 16;
-    lbx[7] = -16;
-    ubx[7] = 16;
-    lbx[8] = -16;
-    ubx[8] = 16;
-    lbx[9] = -16;
-    ubx[9] = 16;
+    lbx[5] = -10;
+    ubx[5] =  10;
+    lbx[6] = -10;
+    ubx[6] =  10;
+    lbx[7] = -10;
+    ubx[7] =  10;
+    lbx[8] = -10;
+    ubx[8] =  10;
+    lbx[9] = -10;
+    ubx[9] =  10;
 
     for (int i = 1; i < N; i++)
     {
@@ -979,16 +986,16 @@ void fr_leg_torque_acados_create_5_set_nlp_in(fr_leg_torque_solver_capsule* caps
     ubx_e[3] = 3.8776;
     lbx_e[4] = -1.2222;
     ubx_e[4] = 2.6878;
-    lbx_e[5] = -16;
-    ubx_e[5] = 16;
-    lbx_e[6] = -16;
-    ubx_e[6] = 16;
-    lbx_e[7] = -16;
-    ubx_e[7] = 16;
-    lbx_e[8] = -16;
-    ubx_e[8] = 16;
-    lbx_e[9] = -16;
-    ubx_e[9] = 16;
+    lbx_e[5] = -10;
+    ubx_e[5] = 10;
+    lbx_e[6] = -10;
+    ubx_e[6] = 10;
+    lbx_e[7] = -10;
+    ubx_e[7] = 10;
+    lbx_e[8] = -10;
+    ubx_e[8] = 10;
+    lbx_e[9] = -10;
+    ubx_e[9] = 10;
     ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, N, "idxbx", idxbx_e);
     ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, N, "lbx", lbx_e);
     ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, N, "ubx", ubx_e);
