@@ -27,7 +27,7 @@
 
 // WBC defines:
 #include "wbc_state_machine_params.hpp"
-#define TH_L 0.1
+#define TH_L 0.3
 #define TH_B 0.1
 #define PRINT_LEG_PLANNER_MPC_RESULTS false
 #define PRINT_BODY_PLANNER_MPC_RESULTS false
@@ -632,6 +632,7 @@ class whole_body_controller {
 
     //Reading from /joint_states-> so x0 is in rads
     x0 = leg_controllers[0]->get_full_state();
+    x0.tail(5).setZero();
     x0[3] *= -1;  //hack for sings:
     
     leg_planner_update_constraints(x0.data());
@@ -888,9 +889,11 @@ class whole_body_controller {
     qd_fl[2] *= -1;
 
     std::array< const Eigen::Vector3f *, 4> qd{&qd_fr,&qd_rr,&qd_fl,&qd_rl};
-    for (int i=0; i<4; i++){ 
-      leg_controllers[i] -> setCommand( *qd[i] ); 
-    }
+    // for (int i=0; i<4; i++){ 
+    //   leg_controllers[i] -> setCommand( *qd[i] ); 
+    // }
+
+    leg_controllers[0] -> setCommand( *qd[0] ); 
 
   }
 
