@@ -32,11 +32,13 @@ controller_mode : 3 #choose from [0: weld, 1: revolute_x, 2: revolute_y, 3: revo
 ### =========== ###
 
 stabilization_mode: false
-manoeuvre_target_torque: [0,0,1]
+manoeuvre_target_torque: [0,0,-2]
 
 # contracting_param: [0.6, 0.5, 0.8, 0.5] #initial -> small movement
-contracting_param: [0.8, 0.8, 0.8, 0.8]
+# contracting_param: [0.8, 0.8, 0.8, 0.8]
+contracting_param: [1,1,1,1]
 
-offset_roll: 40
-offset_pitch: 0
-offset_yaw: 0
+angular_offsets:
+  roll: 40
+  pitch: 0
+  yaw: 30

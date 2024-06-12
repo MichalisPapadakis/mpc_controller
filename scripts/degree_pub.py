@@ -5,6 +5,7 @@ from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Vector3Stamped
 from math import radians
 from tf.transformations import quaternion_from_euler
+from numpy import unwrap
 import math
 from tf.transformations import euler_from_quaternion
 import sys, signal
@@ -29,6 +30,8 @@ class degree_publisher:
     self.pub_msg.vector.y = 0
     self.pub_msg.vector.z = 0
 
+    self.current_angle = 0
+
 
   def update(self):
      while not rospy.is_shutdown():
@@ -41,9 +44,10 @@ class degree_publisher:
      
   def get_angle(self, orientation):
     roll, pitch, yaw = euler_from_quaternion([orientation.x,orientation.y,orientation.z,orientation.w]) #returns radians
-
+    unwraped_yaw = unwrap([self.current_angle, yaw])
+    self.current_angle = unwraped_yaw[1]
     #In qualisys -> everything is in z direction
-    return math.degrees(yaw)
+    return math.degrees(self.current_angle)
 
     
 if __name__ == '__main__':

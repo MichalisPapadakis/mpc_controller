@@ -1,3 +1,4 @@
 src/test*
 !src/test_node_SRBD.cpp
 !src/test_node_torque.cpp
+.vscode/

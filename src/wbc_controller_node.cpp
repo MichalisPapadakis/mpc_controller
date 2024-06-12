@@ -239,6 +239,16 @@ class whole_body_controller {
         }else {ROS_ERROR_STREAM("[mpc controller]: Expected 4 contracting_parameters. "); }        
       }
 
+      if ( !nh_param.getParam("angular_offsets/roll",ang_offset_roll) ){
+           ROS_ERROR_STREAM("[mpc controller]: Couldn't read parameter: angular_offsets/roll. Using 45deg  ");
+      }
+      if ( !nh_param.getParam("angular_offsets/pitch",ang_offset_pitch) ){
+           ROS_ERROR_STREAM("[mpc controller]: Couldn't read parameter: angular_offsets/pitch. Using 0deg  ");
+      }
+      if ( !nh_param.getParam("angular_offsets/yaw",ang_offset_yaw) ){
+           ROS_ERROR_STREAM("[mpc controller]: Couldn't read parameter: angular_offsets/yaw. Using 0deg  ");
+      }
+
       #pragma endregion
       
       //2. create corresponding leg controllers
@@ -822,8 +832,8 @@ class whole_body_controller {
       qd_fl[1] =  qd_fr[1];
       qd_fl[2] =  qd_fr[2];
     }else{ //yaw mode
-      qd_fl[1] = -qd_fr[2]-40;
-      qd_fl[2] = -(qd_fr[1]+40);
+      qd_fl[1] = -qd_fr[2]-ang_offset_yaw;
+      qd_fl[2] = -(qd_fr[1]+ang_offset_yaw);
     }
 
     //Same side mimic:
@@ -875,7 +885,7 @@ class whole_body_controller {
     }
 
     if (i == FR_LEG_TORQUE_N){
-      ROS_INFO_STREAM("reaching end of traj");
+      ROS_DEBUG("reaching end of traj");
       i=0;
       trajectory_timer.stop();
     }
@@ -896,6 +906,10 @@ class whole_body_controller {
   
   std::array<double,3> default_torque_target;
   std::array<double,4> contracting_param{1,1,1,1};
+
+  double ang_offset_roll  = 45;
+  double ang_offset_pitch = 0;
+  double ang_offset_yaw   = 0;
 
   // ===== BODY PLANNER PARAMETERS ========
   #pragma region
