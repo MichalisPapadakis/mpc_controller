@@ -32,11 +32,21 @@ controller_mode : 3 #choose from [0: weld, 1: revolute_x, 2: revolute_y, 3: revo
 ### =========== ###
 
 stabilization_mode: false
-manoeuvre_target_torque: [0,0,-2]
+manoeuvre_target_torque: [0,0,2]
 
-# contracting_param: [0.6, 0.5, 0.8, 0.5] #initial -> small movement
-# contracting_param: [0.8, 0.8, 0.8, 0.8]
-contracting_param: [1,1,1,1]
+#find gains that work for up to close to 1:
+
+contracting_param: [0.6, 0.5, 0.8, 0.5] #initial -> small movement -> 1
+# contracting_param: [0.8, 0.8, 0.8, 0.8] #initial -> small movement -> 1
+
+# contracting_param: [0.6, 0.5, 0.8, 0.5] #initial -> small movement -> 2 :2deg/cycle -2: 1 deg
+# contracting_param: [0.8, 0.8, 0.8, 0.8] #initial -> small movement -> -2: 2.5/cycle
+
+# contracting_param: [1, 1, 1, 1] #finals -> small movement -> -2: 2.5/cycle
+
+# stabilize yaw:
+# contracting_param: [0.8,0.8,0.8,0.8] 
+# contracting_param: [1, 1, 1, 1]
 
 angular_offsets:
   roll: 40
