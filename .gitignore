@@ -2,3 +2,5 @@ src/test*
 !src/test_node_SRBD.cpp
 !src/test_node_torque.cpp
 .vscode/
+config/olympus_param.yaml
+config/simulation_param.yaml

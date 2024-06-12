@@ -207,6 +207,7 @@ class whole_body_controller {
       
       //Controller options:
       int controller_mode_param = 0;
+      int starting_mode = controller_mode::yaw ; //yaw as default
       if ( !nh_param.getParam("controller_mode",controller_mode_param) ){
            ROS_ERROR_STREAM("[mpc controller]: Couldn't read parameter: controller_mode. Selecting floating controller mode ");
       }else{
@@ -215,6 +216,11 @@ class whole_body_controller {
         }else{
           controller_config = controller_mode_param; 
           ROS_INFO_STREAM( "[mpc controller]: Controller configuration is: " << controller_config );
+
+          if ( controller_config == 1 || controller_config == 2 || controller_config == 3 ){
+            current_mode = controller_config - 1;
+            starting_mode = current_mode;
+          }
         }
       }
 
@@ -274,13 +280,15 @@ class whole_body_controller {
 
       //TODO: remove them after logic for mode:
       W_interrupt.setZero();
-      resetting::populate_diagonal(W_interrupt,*( resetting::yaw_W          [current_phase] ) );
-      resetting::populate_vector  (q_interrupt,*( resetting::yaw_setpoints  [current_phase] ) );
-      Th_intterupt = resetting::yaw_thresholds [current_phase ];
+      resetting::populate_diagonal(W_interrupt,*( ( *resetting::mode_W        [ starting_mode] )[current_phase] ) );
+      resetting::populate_vector  (q_interrupt,*( ( *resetting::mode_setpoints[ starting_mode] )[current_phase]  ) );
+      Th_intterupt = ( *resetting::mode_thresholds[ starting_mode] )[current_phase] ;
+      update_projections();
 
       double conv = 180./M_PI;
       ROS_INFO("[wbc controller]: Current setpoint is: [%.1f,%.1f,%.1f]",q_interrupt[0]*conv,q_interrupt[1]*conv,q_interrupt[3]*conv);
       ROS_INFO("[wbc controller]: Current phase is : %d",current_phase);
+      ROS_INFO("[wbc controller]: Current mode is : %d",current_mode);
       ROS_INFO("[wbc controller]: Current threshold  is : %.1f",Th_intterupt);
 
       //4.  Controller Timers:
@@ -538,7 +546,13 @@ class whole_body_controller {
     //TODO: from parameter or something:
     tref_mh     << default_torque_target[0],default_torque_target[1],default_torque_target[2];
 
-    update_reset_algorithm_quantities();
+    if ( !current_mode == controller_mode::stabilizing){
+      update_reset_algorithm_quantities();
+    }else {
+      current_mode = controller_mode::yaw;
+      update_reset_algorithm_quantities(); //uses current mode to index -> quick hack
+      current_mode = controller_mode::stabilizing;
+    }
 
     //Initialize result:
     xtraj_l.fill(0);
@@ -684,6 +698,7 @@ class whole_body_controller {
 
     if (new_mode != current_mode){
       current_mode =new_mode;
+      update_projections();
 
       if (new_mode == controller_mode::stabilizing ){
         trajectory_timer.stop();
@@ -709,6 +724,26 @@ class whole_body_controller {
 
 
   }  
+
+  void update_projections(){
+        switch (current_mode){
+          case controller_mode::roll:
+            cancel_roll = false;
+            pitch_mode = true;
+            break;
+          case controller_mode::pitch:
+            cancel_roll = true;
+            pitch_mode = true;
+            break;            
+          case controller_mode::yaw:
+            cancel_roll = true;
+            pitch_mode = false;
+            break;
+          default:
+            cancel_roll = false;
+            pitch_mode = true;
+        }
+  }
 
   void check_phase(){
     using namespace resetting ;
@@ -760,9 +795,9 @@ class whole_body_controller {
     
     // RESET SELF QUANTITIES:
     using namespace resetting ;
-      populate_diagonal(W_interrupt,*( yaw_W          [resetting_param_id] ) );
-      populate_vector  (q_interrupt,*( yaw_setpoints  [resetting_param_id] ) );
-      Th_intterupt = yaw_thresholds [resetting_param_id];
+      populate_diagonal(W_interrupt,*( ( *mode_W        [ current_mode] )[resetting_param_id] ) );
+      populate_vector  (q_interrupt,*( ( *mode_setpoints[ current_mode] )[resetting_param_id] ) );
+      Th_intterupt = ( *mode_thresholds[ current_mode] )[resetting_param_id] ;
 
       contracting_ws(resetting_param_id); //quick hack
       
@@ -774,7 +809,7 @@ class whole_body_controller {
       // MPC WEIGHTS AND REFERENCE
       qref = q_interrupt; 
 
-      const std::array< double,12> * weights_ptr =  yaw_weights [current_phase] ;
+      const std::array< double,12> * weights_ptr =  (*mode_weights[current_mode]) [current_phase] ;
 
       Wtrack[0] =   weights_ptr->at(0);
       Wtrack[1] =   weights_ptr->at(1);
@@ -806,12 +841,13 @@ class whole_body_controller {
 
   void contracting_ws(const int &  resetting_param){
     using namespace resetting ;
-    Eigen::Matrix<double,5,1> yaw_CG_vec;
-    populate_vector  (yaw_CG_vec,yaw_CG );
+    Eigen::Matrix<double,5,1> cg_vec;
+
+    populate_vector  (cg_vec, (*mode_CG[current_mode]) );
 
     double l = contracting_param[resetting_param];
 
-    q_interrupt = q_interrupt*l + (1-l)*yaw_CG_vec; 
+    q_interrupt = q_interrupt*l + (1-l)*cg_vec; 
   }
 
   // ===== TRAJECTORY PLAYBACK FUNCTIONS ========
