@@ -245,7 +245,16 @@ constexpr std::array<const std::array<double, 12> * , 4> yaw_weights  {  &yaw_we
 
 #pragma endregion
 
+// ===== COMPLERE ====
+constexpr std::array< const  std::array<const std::array<double, 12> * , 4> *,3> mode_weights {& roll_weights, &pitch_weights, &roll_weights };
 
+//resetting params
+constexpr std::array< const  std::array<const std::array<double, 5> * , 4> *,3>  mode_setpoints  { & roll_setpoints,  &pitch_setpoints,  &roll_setpoints };
+constexpr std::array< const  std::array<const std::array<double, 5> * , 4> *,3>  mode_W          {         & roll_W,          &pitch_W,          &roll_W };
+constexpr std::array< const  std::array<double  , 4> *,3>                        mode_thresholds {& roll_thresholds, &pitch_thresholds, &roll_thresholds };
+
+//contracting
+constexpr std::array< const  std::array<double,5>  *,3>                          mode_CG{& roll_CG, &pitch_CG, &roll_CG };
 
 
 
