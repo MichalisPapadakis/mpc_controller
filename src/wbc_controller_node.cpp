@@ -480,8 +480,10 @@ class whole_body_controller {
     if (stabilization_mode){
       double CV = -1; //for yaw
 
-      tref_mh << CV*utraj_b[0],CV*utraj_b[1], SATURATE_YAW(CV*utraj_b[2]) ;
+      tref_mh << SATURATE_ROLL(CV*utraj_b[0]), SATURATE_PITCH(CV*utraj_b[1]), SATURATE_YAW(CV*utraj_b[2]) ;
       if (current_mode == controller_mode::yaw ){
+
+        //TODO: HANDLE BAD HACK -> POSSIBLY INCREASE CV
         if ( quat_desired.angularDistance(quat_current)*180./M_PI > 25) { 
 
           is_direction_positive = ( tref_mh[2] > 0 ) ? true : false;
