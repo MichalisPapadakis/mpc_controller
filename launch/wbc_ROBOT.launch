@@ -16,8 +16,8 @@
   <node name="rqt" pkg="rqt_gui" type="rqt_gui" 
   args=" --perspective-file $(find mpc_controller)/config/wbc_logging.perspective"/>
 
-  <node pkg="olympus_observer" type="olympusObserver" name="olympus_observer" output="screen">
+  <!-- <node pkg="olympus_observer" type="olympusObserver" name="olympus_observer" output="screen">
     <param name="robot" textfile="$(find olympus_observer)/configs/real_offsets.yaml" type="yaml"/>
-  </node>
+  </node> -->
 
 </launch>

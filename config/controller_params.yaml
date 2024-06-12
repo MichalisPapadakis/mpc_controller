@@ -32,7 +32,7 @@ controller_mode : 3 #choose from [0: weld, 1: revolute_x, 2: revolute_y, 3: revo
 ### =========== ###
 
 stabilization_mode: false
-manoeuvre_target_torque: [0,0,2]
+manoeuvre_target_torque: [0,0,1]
 
 #find gains that work for up to close to 1:
 
