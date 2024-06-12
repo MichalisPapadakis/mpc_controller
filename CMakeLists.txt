@@ -19,6 +19,12 @@ add_subdirectory(include/c_generated_code) #position control
 add_subdirectory(include/c_generated_code_SRBD) #SRBD MPC
 add_subdirectory(include/c_generated_code_leg) #torque tracking MPC
 
+#### --------------DEBUGGIN----------------------
+message(STATUS "acados include path: ${ACADOS_INCLUDE_PATH}")
+message(STATUS "acados library path: ${ACADOS_LIB_PATH}")
+message(STATUS "include directories for shared libraries: $ENV{LD_LIBRARY_PATH}")
+message(STATUS "acados include dirs: ${ACADOS_INCLUDE_DIRS}")
+
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
