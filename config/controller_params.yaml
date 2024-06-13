@@ -32,7 +32,7 @@ controller_mode : 3 #choose from [0: weld, 1: revolute_x, 2: revolute_y, 3: revo
 ### =========== ###
 
 stabilization_mode: false
-manoeuvre_target_torque: [0,0,3]
+manoeuvre_target_torque: [0,0,1]
 
 # contracting_param: [0.6, 0.5, 0.8, 0.5] #initial -> small movement
 contracting_param: [0.75, 0.75, 0.75, 0.75]

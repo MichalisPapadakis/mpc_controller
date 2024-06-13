@@ -219,7 +219,7 @@ constexpr double yaw_Q_mid[4]      = {500,20,5e-3,5e-3}; //Q(1),Q(2:5),Q(6),Q(7:
 // res weights:
 constexpr double yaw_Wtrack_res[3] = {1,0,0};
 constexpr double yaw_Wu_res        = 1;
-constexpr double yaw_Wstate_res[4] = {50,1,1e-2,1e-2};     //W(1),W(2:5),W(6),W(7:10)
+constexpr double yaw_Wstate_res[4] = {100,1,1e-2,1e-2};     //W(1),W(2:5),W(6),W(7:10)
 constexpr double yaw_Q_res[4]      = {100,10,5e-3,5e-3}; //Q(1),Q(2:5),Q(6),Q(7:10)
 
 // ext weights:
