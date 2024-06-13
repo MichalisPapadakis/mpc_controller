@@ -1,0 +1,25 @@
+Gains:
+
+Kp: [ 20,16,16] # [Mh,HI,HO]
+Kd: [2.2,0.2,0.2] # [Mh,HI,HO]
+
+Ki: [45,3.3,3.3]
+
+
+Test 1: Yaw
+stabilization_mode: false
+manoeuvre_target_torque: [0,0,1]
+
+contracting_param: [0.6, 0.5, 0.8, 0.5] #initial -> small movement
+
+Test 2: Negative Yaw
+stabilization_mode: false
+manoeuvre_target_torque: [0,0,-1]
+
+contracting_param: [0.6, 0.6, 0.8, 0.6] #initial -> small movement
+
+Test 3: Increase Ws 
+
+stabilization_mode: false
+manoeuvre_target_torque: [0,0,1]
+contracting_param: [0.75, 0.75, 0.75, 0.75]

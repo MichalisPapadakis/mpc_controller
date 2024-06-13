@@ -39,14 +39,16 @@ manoeuvre_target_torque: [0,0,1]
 contracting_param: [0.6, 0.5, 0.8, 0.5] #initial -> small movement -> 1
 # contracting_param: [0.8, 0.8, 0.8, 0.8] #initial -> small movement -> 1
 
-# contracting_param: [0.6, 0.5, 0.8, 0.5] #initial -> small movement -> 2 :2deg/cycle -2: 1 deg
-# contracting_param: [0.8, 0.8, 0.8, 0.8] #initial -> small movement -> -2: 2.5/cycle
+# contracting_param: [0.6, 0.5, 0.8, 0.5] #initial -> small movement
+# contracting_param: [0.75, 0.75, 0.75, 0.75]
+# contracting_param: [0.95,0.95,0.95,0.95]
 
-# contracting_param: [1, 1, 1, 1] #finals -> small movement -> -2: 2.5/cycle
+#Pitch (WIP)
+# contracting_param: [0.5, 1, 0.5, 0.5] +1 #needs also offseting
 
-# stabilize yaw:
-# contracting_param: [0.8,0.8,0.8,0.8] 
-# contracting_param: [1, 1, 1, 1]
+# ROLL:
+# contracting_roll: [0.8, 0.8, 0.8, 0.8] -> 2
+# contracting_roll: [0.8, 0.8, 0.8, 0.8] -> -3
 
 angular_offsets:
   roll: 40

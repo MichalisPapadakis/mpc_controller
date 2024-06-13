@@ -18,6 +18,6 @@
 
   <node pkg="olympus_observer" type="olympusObserver" name="olympus_observer" output="screen">
     <param name="robot" textfile="$(find olympus_observer)/configs/real_offsets.yaml" type="yaml"/>
-  </node>
+  </node> 
 
 </launch>
