@@ -27,7 +27,7 @@
 
 // WBC defines:
 #include "wbc_state_machine_params.hpp"
-#define TH_L 0.1
+#define TH_L 0.05
 #define TRAJ_RATE  0.05
 #define TH_B 0.1
 #define PRINT_LEG_PLANNER_MPC_RESULTS false
@@ -905,11 +905,7 @@ class whole_body_controller {
 
   void trajectory_publish_(){
     int & i = trajectory_indexer ;
-    if (i==0){
-      i=3;
-    }else{
-      i=5;
-    }
+    i = 5; // making the trajectory publish constant reference
 
 
     // Eigen::Vector3f pos(qMH_t[i],qHI_t[i],qHO_t[i]);
